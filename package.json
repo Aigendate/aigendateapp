@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
-    "seed": "node build/seed.js"
+    "seed": "node build/seed.js",
+    "dashboard": "node build/dashboard.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
