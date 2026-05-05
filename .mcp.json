@@ -2,7 +2,7 @@
   "mcpServers": {
     "turnos": {
       "command": "node",
-      "args": ["/Users/jordan/Develop/tinker/turnos/build/index.js"]
+      "args": ["--import", "tsx", "/Users/jordan/Develop/tinker/turnos/mcp-stdio.ts"]
     }
   }
 }

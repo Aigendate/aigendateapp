@@ -1,11 +1,8 @@
 import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-interface Hospital {
+export interface Hospital {
   id: string;
   name: string;
   address: string;
@@ -13,7 +10,7 @@ interface Hospital {
   lng: number;
 }
 
-interface Patient {
+export interface Patient {
   id: string;
   name: string;
   email: string;
@@ -21,7 +18,7 @@ interface Patient {
   created_at: string;
 }
 
-interface Doctor {
+export interface Doctor {
   id: string;
   name: string;
   specialty: string;
@@ -29,7 +26,7 @@ interface Doctor {
   hospital_name?: string;
 }
 
-interface Appointment {
+export interface Appointment {
   id: string;
   hospital_id: string;
   hospital_name?: string;
@@ -54,9 +51,9 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function initDb(): Database.Database {
-  const dbPath = path.join(__dirname, "..", "turnos.db");
-  const db = new Database(dbPath);
+export function initDb(dbPath?: string): Database.Database {
+  const resolvedPath = dbPath ?? path.join(process.cwd(), "turnos.db");
+  const db = new Database(resolvedPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
@@ -99,16 +96,32 @@ export function initDb(): Database.Database {
   return db;
 }
 
+declare global {
+  var __turnos_db: Database.Database | undefined;
+}
+
+export function getDb(dbPath?: string): Database.Database {
+  if (!globalThis.__turnos_db) {
+    globalThis.__turnos_db = initDb(dbPath);
+  }
+  return globalThis.__turnos_db;
+}
+
 export function insertHospital(
   db: Database.Database,
   params: { name: string; address: string; lat: number; lng: number }
 ): string {
   const id = randomUUID();
-  db.prepare("INSERT INTO hospitals (id, name, address, lat, lng) VALUES (?, ?, ?, ?, ?)").run(id, params.name, params.address, params.lat, params.lng);
+  db.prepare("INSERT INTO hospitals (id, name, address, lat, lng) VALUES (?, ?, ?, ?, ?)").run(
+    id, params.name, params.address, params.lat, params.lng
+  );
   return id;
 }
 
-export function listHospitals(db: Database.Database, opts: { name?: string; lat?: number; lng?: number } = {}): (Hospital & { distance_km?: number })[] {
+export function listHospitals(
+  db: Database.Database,
+  opts: { name?: string; lat?: number; lng?: number } = {}
+): (Hospital & { distance_km?: number })[] {
   let rows: Hospital[];
   if (opts.name) {
     rows = db.prepare("SELECT * FROM hospitals WHERE name LIKE ?").all(`%${opts.name}%`) as Hospital[];
@@ -117,7 +130,10 @@ export function listHospitals(db: Database.Database, opts: { name?: string; lat?
   }
   if (opts.lat !== undefined && opts.lng !== undefined) {
     return rows
-      .map((h) => ({ ...h, distance_km: Math.round(haversineKm(opts.lat!, opts.lng!, h.lat, h.lng) * 10) / 10 }))
+      .map((h) => ({
+        ...h,
+        distance_km: Math.round(haversineKm(opts.lat!, opts.lng!, h.lat, h.lng) * 10) / 10,
+      }))
       .sort((a, b) => a.distance_km - b.distance_km);
   }
   return rows;
@@ -128,7 +144,9 @@ export function insertDoctor(
   params: { name: string; specialty: string; hospital_id: string }
 ): string {
   const id = randomUUID();
-  db.prepare("INSERT INTO doctors (id, name, specialty, hospital_id) VALUES (?, ?, ?, ?)").run(id, params.name, params.specialty, params.hospital_id);
+  db.prepare("INSERT INTO doctors (id, name, specialty, hospital_id) VALUES (?, ?, ?, ?)").run(
+    id, params.name, params.specialty, params.hospital_id
+  );
   return id;
 }
 
@@ -145,7 +163,9 @@ export function listDoctors(
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   return db
-    .prepare(`SELECT d.*, h.name as hospital_name FROM doctors d JOIN hospitals h ON d.hospital_id = h.id ${where} ORDER BY d.specialty, d.name`)
+    .prepare(
+      `SELECT d.*, h.name as hospital_name FROM doctors d JOIN hospitals h ON d.hospital_id = h.id ${where} ORDER BY d.specialty, d.name`
+    )
     .all(...values) as Doctor[];
 }
 
@@ -159,14 +179,16 @@ export function registerPatient(
   }
 
   const id = randomUUID();
-  db.prepare("INSERT INTO patients (id, name, email, phone) VALUES (?, ?, ?, ?)").run(id, params.name, params.email ?? null, params.phone ?? null);
-  return { ok: true, patient: { id, name: params.name, email: params.email ?? "", phone: params.phone ?? "", created_at: new Date().toISOString() } };
+  db.prepare("INSERT INTO patients (id, name, email, phone) VALUES (?, ?, ?, ?)").run(
+    id, params.name, params.email ?? null, params.phone ?? null
+  );
+  return {
+    ok: true,
+    patient: { id, name: params.name, email: params.email ?? "", phone: params.phone ?? "", created_at: new Date().toISOString() },
+  };
 }
 
-export function listPatients(
-  db: Database.Database,
-  search?: string
-): Patient[] {
+export function listPatients(db: Database.Database, search?: string): Patient[] {
   if (search) {
     const pattern = `%${search}%`;
     return db.prepare("SELECT * FROM patients WHERE name LIKE ? OR email LIKE ? ORDER BY name").all(pattern, pattern) as Patient[];
@@ -187,19 +209,19 @@ export function createAppointment(
   const doctor = db.prepare("SELECT * FROM doctors WHERE id = ?").get(params.doctor_id) as Doctor | undefined;
   if (!doctor) return { ok: false, error: `Doctor not found: ${params.doctor_id}. Use list_doctors to find one.` };
 
-  if (doctor.hospital_id !== params.hospital_id) return { ok: false, error: `Dr. ${doctor.name} does not practice at this hospital.` };
+  if (doctor.hospital_id !== params.hospital_id)
+    return { ok: false, error: `Dr. ${doctor.name} does not practice at this hospital.` };
 
   const conflict = db
-    .prepare(
-      "SELECT id FROM appointments WHERE doctor_id = ? AND date = ? AND time = ? AND status = 'scheduled'"
-    )
+    .prepare("SELECT id FROM appointments WHERE doctor_id = ? AND date = ? AND time = ? AND status = 'scheduled'")
     .get(params.doctor_id, params.date, params.time);
-  if (conflict) return { ok: false, error: `Dr. ${doctor.name} already has an appointment at ${params.date} ${params.time}.` };
+  if (conflict)
+    return { ok: false, error: `Dr. ${doctor.name} already has an appointment at ${params.date} ${params.time}.` };
 
   const id = randomUUID();
-  db.prepare(
-    "INSERT INTO appointments (id, hospital_id, patient_id, doctor_id, date, time) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(id, params.hospital_id, params.patient_id, params.doctor_id, params.date, params.time);
+  db.prepare("INSERT INTO appointments (id, hospital_id, patient_id, doctor_id, date, time) VALUES (?, ?, ?, ?, ?, ?)").run(
+    id, params.hospital_id, params.patient_id, params.doctor_id, params.date, params.time
+  );
 
   return { ok: true, appointment: { id, ...params, status: "scheduled", created_at: new Date().toISOString() } };
 }
@@ -220,7 +242,14 @@ export function listAppointments(
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   return db
-    .prepare(`SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty FROM appointments a JOIN hospitals h ON a.hospital_id = h.id JOIN patients p ON a.patient_id = p.id JOIN doctors d ON a.doctor_id = d.id ${where} ORDER BY a.date, a.time`)
+    .prepare(
+      `SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty
+       FROM appointments a
+       JOIN hospitals h ON a.hospital_id = h.id
+       JOIN patients p ON a.patient_id = p.id
+       JOIN doctors d ON a.doctor_id = d.id
+       ${where} ORDER BY a.date, a.time`
+    )
     .all(...values) as Appointment[];
 }
 
@@ -228,7 +257,16 @@ export function cancelAppointment(
   db: Database.Database,
   id: string
 ): { ok: true; appointment: Appointment } | { ok: false; error: string } {
-  const row = db.prepare("SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty FROM appointments a JOIN hospitals h ON a.hospital_id = h.id JOIN patients p ON a.patient_id = p.id JOIN doctors d ON a.doctor_id = d.id WHERE a.id = ?").get(id) as Appointment | undefined;
+  const row = db
+    .prepare(
+      `SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty
+       FROM appointments a
+       JOIN hospitals h ON a.hospital_id = h.id
+       JOIN patients p ON a.patient_id = p.id
+       JOIN doctors d ON a.doctor_id = d.id
+       WHERE a.id = ?`
+    )
+    .get(id) as Appointment | undefined;
   if (!row) return { ok: false, error: "Appointment not found." };
   if (row.status === "cancelled") return { ok: false, error: "Appointment is already cancelled." };
 

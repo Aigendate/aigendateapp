@@ -1,15 +1,20 @@
-#!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { initDb, listHospitals, listDoctors, registerPatient, listPatients, createAppointment, listAppointments, cancelAppointment } from "./db.js";
+import {
+  getDb,
+  listHospitals,
+  listDoctors,
+  registerPatient,
+  listPatients,
+  createAppointment,
+  listAppointments,
+  cancelAppointment,
+} from "./db.js";
 
-const db = initDb();
+export function createMcpServer(dbPath?: string): McpServer {
+  const server = new McpServer({ name: "turnos", version: "1.0.0" });
+  const db = getDb(dbPath);
 
-function registerTools(server: McpServer) {
   server.tool(
     "list_hospitals",
     "List available hospitals, optionally sorted by distance from your coordinates",
@@ -161,78 +166,6 @@ function registerTools(server: McpServer) {
       };
     }
   );
-}
 
-function createMcpServer(): McpServer {
-  const server = new McpServer({ name: "turnos", version: "1.0.0" });
-  registerTools(server);
   return server;
 }
-
-async function main() {
-  const useHttp = process.argv.includes("--http");
-  const port = parseInt(process.env.PORT || "3001", 10);
-
-  if (useHttp) {
-    const sessions = new Map<string, { server: McpServer; transport: StreamableHTTPServerTransport }>();
-
-    const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, Mcp-Session-Id");
-      res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
-
-      const url = new URL(req.url ?? "/", `http://localhost:${port}`);
-
-      if (req.method === "OPTIONS") {
-        res.writeHead(204).end();
-        return;
-      }
-
-      if (url.pathname !== "/mcp") {
-        res.writeHead(404).end("Not found");
-        return;
-      }
-
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
-
-      if (sessionId && sessions.has(sessionId)) {
-        await sessions.get(sessionId)!.transport.handleRequest(req, res);
-        return;
-      }
-
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-      });
-      const server = createMcpServer();
-
-      await server.connect(transport);
-
-      transport.onclose = () => {
-        if (transport.sessionId) {
-          sessions.delete(transport.sessionId);
-        }
-      };
-
-      await transport.handleRequest(req, res);
-
-      if (transport.sessionId) {
-        sessions.set(transport.sessionId, { server, transport });
-      }
-    });
-
-    httpServer.listen(port, () => {
-      console.error(`Turnos MCP Server running on http://localhost:${port}/mcp`);
-    });
-  } else {
-    const server = createMcpServer();
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.error("Turnos MCP Server running on stdio");
-  }
-}
-
-main().catch((error) => {
-  console.error("Fatal error:", error);
-  process.exit(1);
-});

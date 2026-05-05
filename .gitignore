@@ -1,5 +1,8 @@
 node_modules/
 build/
-turnos.db
-turnos.db-shm
-turnos.db-wal
+.react-router/
+.vite/
+data/
+*.db
+*.db-shm
+*.db-wal
