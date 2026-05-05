@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
+    "start:http": "node build/index.js --http",
     "seed": "node build/seed.js",
     "dashboard": "node build/dashboard.js"
   },

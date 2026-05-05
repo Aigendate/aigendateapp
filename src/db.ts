@@ -21,16 +21,25 @@ interface Patient {
   created_at: string;
 }
 
+interface Doctor {
+  id: string;
+  name: string;
+  specialty: string;
+  hospital_id: string;
+  hospital_name?: string;
+}
+
 interface Appointment {
   id: string;
   hospital_id: string;
   hospital_name?: string;
   patient_id: string;
   patient_name?: string;
-  doctor: string;
+  doctor_id: string;
+  doctor_name?: string;
+  specialty?: string;
   date: string;
   time: string;
-  specialty: string;
   status: string;
   created_at: string;
 }
@@ -63,19 +72,25 @@ export function initDb(): Database.Database {
     CREATE TABLE IF NOT EXISTS patients (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
-      email      TEXT NOT NULL UNIQUE,
-      phone      TEXT NOT NULL,
+      email      TEXT UNIQUE,
+      phone      TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS doctors (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      specialty   TEXT NOT NULL,
+      hospital_id TEXT NOT NULL REFERENCES hospitals(id)
     );
 
     CREATE TABLE IF NOT EXISTS appointments (
       id          TEXT PRIMARY KEY,
       hospital_id TEXT NOT NULL REFERENCES hospitals(id),
       patient_id  TEXT NOT NULL REFERENCES patients(id),
-      doctor      TEXT NOT NULL,
+      doctor_id   TEXT NOT NULL REFERENCES doctors(id),
       date        TEXT NOT NULL,
       time        TEXT NOT NULL,
-      specialty   TEXT NOT NULL,
       status      TEXT NOT NULL DEFAULT 'scheduled',
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -108,16 +123,44 @@ export function listHospitals(db: Database.Database, opts: { name?: string; lat?
   return rows;
 }
 
+export function insertDoctor(
+  db: Database.Database,
+  params: { name: string; specialty: string; hospital_id: string }
+): string {
+  const id = randomUUID();
+  db.prepare("INSERT INTO doctors (id, name, specialty, hospital_id) VALUES (?, ?, ?, ?)").run(id, params.name, params.specialty, params.hospital_id);
+  return id;
+}
+
+export function listDoctors(
+  db: Database.Database,
+  filters: { hospital_id?: string; specialty?: string; name?: string } = {}
+): Doctor[] {
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+
+  if (filters.hospital_id) { conditions.push("d.hospital_id = ?"); values.push(filters.hospital_id); }
+  if (filters.specialty) { conditions.push("d.specialty LIKE ?"); values.push(`%${filters.specialty}%`); }
+  if (filters.name) { conditions.push("d.name LIKE ?"); values.push(`%${filters.name}%`); }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  return db
+    .prepare(`SELECT d.*, h.name as hospital_name FROM doctors d JOIN hospitals h ON d.hospital_id = h.id ${where} ORDER BY d.specialty, d.name`)
+    .all(...values) as Doctor[];
+}
+
 export function registerPatient(
   db: Database.Database,
-  params: { name: string; email: string; phone: string }
+  params: { name: string; email?: string; phone?: string }
 ): { ok: true; patient: Patient } | { ok: false; error: string } {
-  const existing = db.prepare("SELECT id FROM patients WHERE email = ?").get(params.email) as Patient | undefined;
-  if (existing) return { ok: false, error: `A patient with email ${params.email} is already registered.` };
+  if (params.email) {
+    const existing = db.prepare("SELECT id FROM patients WHERE email = ?").get(params.email) as Patient | undefined;
+    if (existing) return { ok: false, error: `A patient with email ${params.email} is already registered.` };
+  }
 
   const id = randomUUID();
-  db.prepare("INSERT INTO patients (id, name, email, phone) VALUES (?, ?, ?, ?)").run(id, params.name, params.email, params.phone);
-  return { ok: true, patient: { id, ...params, created_at: new Date().toISOString() } };
+  db.prepare("INSERT INTO patients (id, name, email, phone) VALUES (?, ?, ?, ?)").run(id, params.name, params.email ?? null, params.phone ?? null);
+  return { ok: true, patient: { id, name: params.name, email: params.email ?? "", phone: params.phone ?? "", created_at: new Date().toISOString() } };
 }
 
 export function listPatients(
@@ -133,7 +176,7 @@ export function listPatients(
 
 export function createAppointment(
   db: Database.Database,
-  params: { hospital_id: string; patient_id: string; doctor: string; date: string; time: string; specialty: string }
+  params: { hospital_id: string; patient_id: string; doctor_id: string; date: string; time: string }
 ): { ok: true; appointment: Appointment } | { ok: false; error: string } {
   const hospital = db.prepare("SELECT id FROM hospitals WHERE id = ?").get(params.hospital_id) as Hospital | undefined;
   if (!hospital) return { ok: false, error: `Hospital not found: ${params.hospital_id}` };
@@ -141,38 +184,43 @@ export function createAppointment(
   const patient = db.prepare("SELECT id FROM patients WHERE id = ?").get(params.patient_id) as Patient | undefined;
   if (!patient) return { ok: false, error: `Patient not found: ${params.patient_id}. Register them first with register_patient.` };
 
+  const doctor = db.prepare("SELECT * FROM doctors WHERE id = ?").get(params.doctor_id) as Doctor | undefined;
+  if (!doctor) return { ok: false, error: `Doctor not found: ${params.doctor_id}. Use list_doctors to find one.` };
+
+  if (doctor.hospital_id !== params.hospital_id) return { ok: false, error: `Dr. ${doctor.name} does not practice at this hospital.` };
+
   const conflict = db
     .prepare(
-      "SELECT id FROM appointments WHERE hospital_id = ? AND doctor = ? AND date = ? AND time = ? AND status = 'scheduled'"
+      "SELECT id FROM appointments WHERE doctor_id = ? AND date = ? AND time = ? AND status = 'scheduled'"
     )
-    .get(params.hospital_id, params.doctor, params.date, params.time);
-  if (conflict) return { ok: false, error: `Doctor ${params.doctor} already has an appointment at ${params.date} ${params.time} at this hospital.` };
+    .get(params.doctor_id, params.date, params.time);
+  if (conflict) return { ok: false, error: `Dr. ${doctor.name} already has an appointment at ${params.date} ${params.time}.` };
 
   const id = randomUUID();
   db.prepare(
-    "INSERT INTO appointments (id, hospital_id, patient_id, doctor, date, time, specialty) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(id, params.hospital_id, params.patient_id, params.doctor, params.date, params.time, params.specialty);
+    "INSERT INTO appointments (id, hospital_id, patient_id, doctor_id, date, time) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(id, params.hospital_id, params.patient_id, params.doctor_id, params.date, params.time);
 
   return { ok: true, appointment: { id, ...params, status: "scheduled", created_at: new Date().toISOString() } };
 }
 
 export function listAppointments(
   db: Database.Database,
-  filters: { hospital_id?: string; date?: string; doctor?: string; patient_id?: string; status?: string }
+  filters: { hospital_id?: string; date?: string; doctor_id?: string; patient_id?: string; status?: string }
 ): Appointment[] {
   const conditions: string[] = [];
   const values: unknown[] = [];
 
   if (filters.hospital_id) { conditions.push("a.hospital_id = ?"); values.push(filters.hospital_id); }
   if (filters.date) { conditions.push("a.date = ?"); values.push(filters.date); }
-  if (filters.doctor) { conditions.push("a.doctor = ?"); values.push(filters.doctor); }
+  if (filters.doctor_id) { conditions.push("a.doctor_id = ?"); values.push(filters.doctor_id); }
   if (filters.patient_id) { conditions.push("a.patient_id = ?"); values.push(filters.patient_id); }
   conditions.push("a.status = ?");
   values.push(filters.status ?? "scheduled");
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   return db
-    .prepare(`SELECT a.*, h.name as hospital_name, p.name as patient_name FROM appointments a JOIN hospitals h ON a.hospital_id = h.id JOIN patients p ON a.patient_id = p.id ${where} ORDER BY a.date, a.time`)
+    .prepare(`SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty FROM appointments a JOIN hospitals h ON a.hospital_id = h.id JOIN patients p ON a.patient_id = p.id JOIN doctors d ON a.doctor_id = d.id ${where} ORDER BY a.date, a.time`)
     .all(...values) as Appointment[];
 }
 
@@ -180,7 +228,7 @@ export function cancelAppointment(
   db: Database.Database,
   id: string
 ): { ok: true; appointment: Appointment } | { ok: false; error: string } {
-  const row = db.prepare("SELECT a.*, h.name as hospital_name, p.name as patient_name FROM appointments a JOIN hospitals h ON a.hospital_id = h.id JOIN patients p ON a.patient_id = p.id WHERE a.id = ?").get(id) as Appointment | undefined;
+  const row = db.prepare("SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty FROM appointments a JOIN hospitals h ON a.hospital_id = h.id JOIN patients p ON a.patient_id = p.id JOIN doctors d ON a.doctor_id = d.id WHERE a.id = ?").get(id) as Appointment | undefined;
   if (!row) return { ok: false, error: "Appointment not found." };
   if (row.status === "cancelled") return { ok: false, error: "Appointment is already cancelled." };
 

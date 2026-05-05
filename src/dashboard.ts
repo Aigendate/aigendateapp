@@ -8,18 +8,19 @@ const PORT = 3456;
 function getStats() {
   const hospitals = (db.prepare("SELECT COUNT(*) as n FROM hospitals").get() as { n: number }).n;
   const patients = (db.prepare("SELECT COUNT(*) as n FROM patients").get() as { n: number }).n;
+  const doctors = (db.prepare("SELECT COUNT(*) as n FROM doctors").get() as { n: number }).n;
   const scheduled = (db.prepare("SELECT COUNT(*) as n FROM appointments WHERE status = 'scheduled'").get() as { n: number }).n;
   const cancelled = (db.prepare("SELECT COUNT(*) as n FROM appointments WHERE status = 'cancelled'").get() as { n: number }).n;
-  const specialties = db.prepare("SELECT DISTINCT specialty FROM appointments ORDER BY specialty").all() as { specialty: string }[];
-  return { hospitals, patients, scheduled, cancelled, specialties: specialties.map((s) => s.specialty) };
+  return { hospitals, patients, doctors, scheduled, cancelled };
 }
 
 function getAppointments() {
   return db.prepare(`
-    SELECT a.*, h.name as hospital_name, p.name as patient_name
+    SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty
     FROM appointments a
     JOIN hospitals h ON a.hospital_id = h.id
     JOIN patients p ON a.patient_id = p.id
+    JOIN doctors d ON a.doctor_id = d.id
     ORDER BY a.date, a.time
   `).all();
 }
@@ -32,11 +33,17 @@ function getPatients() {
   return db.prepare("SELECT * FROM patients ORDER BY name").all();
 }
 
+function getDoctors() {
+  return db.prepare("SELECT d.*, h.name as hospital_name FROM doctors d JOIN hospitals h ON d.hospital_id = h.id ORDER BY d.specialty, d.name").all();
+}
+
 function getSpecialtyBreakdown() {
   return db.prepare(`
-    SELECT specialty, COUNT(*) as count
-    FROM appointments WHERE status = 'scheduled'
-    GROUP BY specialty ORDER BY count DESC
+    SELECT d.specialty, COUNT(*) as count
+    FROM appointments a
+    JOIN doctors d ON a.doctor_id = d.id
+    WHERE a.status = 'scheduled'
+    GROUP BY d.specialty ORDER BY count DESC
   `).all();
 }
 
@@ -56,6 +63,7 @@ function renderPage(): string {
   const stats = getStats();
   const appointments = getAppointments();
   const hospitals = getHospitals();
+  const doctors = getDoctors();
   const patients = getPatients();
   const specialtyBreakdown = getSpecialtyBreakdown();
   const topHospitals = getHospitalAppointmentCounts();
@@ -120,7 +128,7 @@ function renderPage(): string {
 
   /* --- Stats strip --- */
   .stats {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2.5rem;
   }
 
   .stat {
@@ -134,8 +142,9 @@ function renderPage(): string {
 
   .stat:nth-child(1)::before { background: var(--teal); }
   .stat:nth-child(2)::before { background: var(--accent); }
-  .stat:nth-child(3)::before { background: var(--ink); }
-  .stat:nth-child(4)::before { background: var(--red); }
+  .stat:nth-child(3)::before { background: #5B4FC7; }
+  .stat:nth-child(4)::before { background: var(--ink); }
+  .stat:nth-child(5)::before { background: var(--red); }
 
   .stat .label {
     font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
@@ -149,7 +158,8 @@ function renderPage(): string {
 
   .stat:nth-child(1) .value { color: var(--teal); }
   .stat:nth-child(2) .value { color: var(--accent); }
-  .stat:nth-child(4) .value { color: var(--red); }
+  .stat:nth-child(3) .value { color: #5B4FC7; }
+  .stat:nth-child(5) .value { color: var(--red); }
 
   /* --- Grid layout --- */
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2.5rem; }
@@ -296,6 +306,8 @@ function renderPage(): string {
   .stat:nth-child(2) { animation-delay: 0.06s; }
   .stat:nth-child(3) { animation-delay: 0.12s; }
   .stat:nth-child(4) { animation-delay: 0.18s; }
+  .stat:nth-child(5) { animation-delay: 0.24s; }
+  .stat:nth-child(4) { animation-delay: 0.18s; }
 
   .card { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s backwards; }
 
@@ -325,6 +337,10 @@ function renderPage(): string {
     <div class="stat">
       <div class="label">Pacientes</div>
       <div class="value">${stats.patients}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Doctores</div>
+      <div class="value">${stats.doctors}</div>
     </div>
     <div class="stat">
       <div class="label">Turnos Activos</div>
@@ -376,11 +392,11 @@ function renderPage(): string {
           <th>Especialidad</th><th>Hospital</th><th>Estado</th>
         </tr></thead>
         <tbody>
-          ${(appointments as { date: string; time: string; patient_name: string; doctor: string; specialty: string; hospital_name: string; status: string }[]).map((a) => `<tr>
+          ${(appointments as { date: string; time: string; patient_name: string; doctor_name: string; specialty: string; hospital_name: string; status: string }[]).map((a) => `<tr>
             <td>${a.date}</td>
             <td>${a.time}</td>
             <td>${a.patient_name}</td>
-            <td>${a.doctor}</td>
+            <td>${a.doctor_name}</td>
             <td><span class="specialty-tag">${a.specialty}</span></td>
             <td>${a.hospital_name}</td>
             <td><span class="pill ${a.status}">${a.status === "scheduled" ? "activo" : "cancelado"}</span></td>
