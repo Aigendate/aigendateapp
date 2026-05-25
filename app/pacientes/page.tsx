@@ -1,21 +1,16 @@
-import type { Route } from "./+types/pacientes";
-import { useSearchParams } from "react-router";
 import { getDb, listPatients } from "../../server/db.server";
 import { Card, CardHeader, CardTitle, CardContent } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import { Input } from "~/components/ui/input";
+import { SearchInput } from "~/components/search-input";
 
-export function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const search = url.searchParams.get("q") || undefined;
+export default async function PacientesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
   const db = getDb();
-  const patients = listPatients(db, search);
-  return { patients, q: search ?? "" };
-}
-
-export default function Pacientes({ loaderData }: Route.ComponentProps) {
-  const { patients, q } = loaderData;
-  const [, setSearchParams] = useSearchParams();
+  const patients = listPatients(db, q);
 
   return (
     <Card>
@@ -24,18 +19,10 @@ export default function Pacientes({ loaderData }: Route.ComponentProps) {
         <Badge>{patients.length}</Badge>
       </CardHeader>
       <CardContent>
-        <Input
+        <SearchInput
           placeholder="Buscar por nombre o email..."
-          defaultValue={q}
+          defaultValue={q ?? ""}
           className="mb-4"
-          onChange={(e) => {
-            const value = e.target.value;
-            if (value) {
-              setSearchParams({ q: value }, { replace: true });
-            } else {
-              setSearchParams({}, { replace: true });
-            }
-          }}
         />
         <div className="space-y-0">
           {patients.map((p) => (

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { getDb, insertHospital, insertDoctor, registerPatient, createAppointment } from "./server/db.js";
+import { getDb, insertHospital, insertDoctor, registerPatient, createAppointment } from "./server/db";
 
 const db = getDb();
 

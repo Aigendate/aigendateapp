@@ -16,7 +16,7 @@ import {
   createAppointment,
   listAppointments,
   cancelAppointment,
-} from "../../server/db.js";
+} from "../../server/db";
 
 function seedTestDb(db: Database.Database) {
   const hospitalId = insertHospital(db, {

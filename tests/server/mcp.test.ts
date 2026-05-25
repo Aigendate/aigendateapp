@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { createMcpServer } from "../../server/mcp.js";
+import { createMcpServer } from "../../server/mcp";
 
 describe("createMcpServer", () => {
   afterEach(() => {

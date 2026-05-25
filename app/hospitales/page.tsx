@@ -1,21 +1,16 @@
-import type { Route } from "./+types/hospitales";
-import { useSearchParams } from "react-router";
 import { getDb, listHospitals } from "../../server/db.server";
 import { Card, CardHeader, CardTitle, CardContent } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import { Input } from "~/components/ui/input";
+import { SearchInput } from "~/components/search-input";
 
-export function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const q = url.searchParams.get("q") || undefined;
+export default async function HospitalesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
   const db = getDb();
   const hospitals = listHospitals(db, { name: q });
-  return { hospitals, q: q ?? "" };
-}
-
-export default function Hospitales({ loaderData }: Route.ComponentProps) {
-  const { hospitals, q } = loaderData;
-  const [, setSearchParams] = useSearchParams();
 
   return (
     <Card>
@@ -24,23 +19,9 @@ export default function Hospitales({ loaderData }: Route.ComponentProps) {
         <Badge>{hospitals.length}</Badge>
       </CardHeader>
       <CardContent>
-        <form
-          onSubmit={(e) => e.preventDefault()}
-          className="mb-4"
-        >
-          <Input
-            placeholder="Buscar hospital..."
-            defaultValue={q}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (value) {
-                setSearchParams({ q: value }, { replace: true });
-              } else {
-                setSearchParams({}, { replace: true });
-              }
-            }}
-          />
-        </form>
+        <div className="mb-4">
+          <SearchInput placeholder="Buscar hospital..." defaultValue={q ?? ""} />
+        </div>
         <div className="grid max-h-[600px] grid-cols-1 gap-0 overflow-y-auto md:grid-cols-2">
           {hospitals.map((h) => (
             <div

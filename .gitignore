@@ -1,8 +1,12 @@
 node_modules/
+.next/
+next-env.d.ts
 build/
-.react-router/
-.vite/
 data/
 *.db
 *.db-shm
 *.db-wal
+.DS_Store
+tsconfig.tsbuildinfo
+.agents/
+skills-lock.json

@@ -1,5 +1,4 @@
-import type { Route } from "./+types/_index";
-import { getDb } from "../../server/db.server";
+import { getDb } from "../server/db.server";
 import { StatCard } from "~/components/stat-card";
 import { BarChart } from "~/components/bar-chart";
 import { Badge } from "~/components/ui/badge";
@@ -13,7 +12,7 @@ import {
   TableCell,
 } from "~/components/ui/table";
 
-export function loader() {
+export default function IndexPage() {
   const db = getDb();
   const stats = {
     hospitals: (db.prepare("SELECT COUNT(*) as n FROM hospitals").get() as { n: number }).n,
@@ -49,12 +48,6 @@ export function loader() {
     hospital_name: string;
     status: string;
   }[];
-
-  return { stats, specialtyBreakdown, topHospitals, appointments };
-}
-
-export default function Index({ loaderData }: Route.ComponentProps) {
-  const { stats, specialtyBreakdown, topHospitals, appointments } = loaderData;
 
   return (
     <>

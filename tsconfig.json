@@ -1,21 +1,24 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "strict": true,
     "esModuleInterop": true,
+    "allowJs": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "isolatedModules": true,
-    "rootDirs": [".", ".react-router/types"],
+    "resolveJsonModule": true,
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
     "paths": {
       "~/*": ["./app/*"]
-    },
-    "types": ["node", "vite/client"]
+    }
   },
-  "include": [".react-router/types/**/*", "app/**/*", "server/**/*", "tests/**/*", "*.ts", "env.d.ts"],
-  "exclude": ["node_modules", "build"]
+  "include": ["next-env.d.ts", "app/**/*", "server/**/*", "tests/**/*", "*.ts", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next"]
 }

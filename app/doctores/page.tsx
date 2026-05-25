@@ -1,9 +1,7 @@
-import type { Route } from "./+types/doctores";
-import { useSearchParams } from "react-router";
 import { getDb, listDoctors } from "../../server/db.server";
 import { Card, CardHeader, CardTitle, CardContent } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import { Input } from "~/components/ui/input";
+import { SearchInput } from "~/components/search-input";
 import {
   Table,
   TableHeader,
@@ -13,18 +11,14 @@ import {
   TableCell,
 } from "~/components/ui/table";
 
-export function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const specialty = url.searchParams.get("specialty") || undefined;
-  const name = url.searchParams.get("q") || undefined;
+export default async function DoctoresPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; specialty?: string }>;
+}) {
+  const { q, specialty } = await searchParams;
   const db = getDb();
-  const doctors = listDoctors(db, { specialty, name });
-  return { doctors, specialty: specialty ?? "", q: name ?? "" };
-}
-
-export default function Doctores({ loaderData }: Route.ComponentProps) {
-  const { doctors, q } = loaderData;
-  const [, setSearchParams] = useSearchParams();
+  const doctors = listDoctors(db, { specialty, name: q });
 
   return (
     <Card>
@@ -33,18 +27,10 @@ export default function Doctores({ loaderData }: Route.ComponentProps) {
         <Badge>{doctors.length}</Badge>
       </CardHeader>
       <CardContent>
-        <Input
+        <SearchInput
           placeholder="Buscar por nombre o especialidad..."
-          defaultValue={q}
+          defaultValue={q ?? ""}
           className="mb-4"
-          onChange={(e) => {
-            const value = e.target.value;
-            if (value) {
-              setSearchParams({ q: value }, { replace: true });
-            } else {
-              setSearchParams({}, { replace: true });
-            }
-          }}
         />
         <Table>
           <TableHeader>

@@ -10,7 +10,7 @@ import {
   listDoctors,
   listPatients,
   listAppointments,
-} from "../../server/db.js";
+} from "../../server/db";
 
 function seedAll(db: Database.Database) {
   const h1 = insertHospital(db, { name: "Hospital Central", address: "Asunción", lat: -25.28, lng: -57.63 });

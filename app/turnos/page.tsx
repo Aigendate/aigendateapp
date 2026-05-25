@@ -1,9 +1,7 @@
-import type { Route } from "./+types/turnos";
-import { useSearchParams } from "react-router";
 import { getDb, listAppointments } from "../../server/db.server";
 import { Card, CardHeader, CardTitle, CardContent } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import { Input } from "~/components/ui/input";
+import { TurnosFilters } from "./filters";
 import {
   Table,
   TableHeader,
@@ -13,20 +11,14 @@ import {
   TableCell,
 } from "~/components/ui/table";
 
-export function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const date = url.searchParams.get("date") || undefined;
-  const status = (url.searchParams.get("status") as "scheduled" | "cancelled") || undefined;
-  const doctor_id = url.searchParams.get("doctor_id") || undefined;
-
+export default async function TurnosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string; status?: "scheduled" | "cancelled"; doctor_id?: string }>;
+}) {
+  const { date, status, doctor_id } = await searchParams;
   const db = getDb();
   const appointments = listAppointments(db, { date, status, doctor_id });
-  return { appointments, date: date ?? "", status: status ?? "" };
-}
-
-export default function Turnos({ loaderData }: Route.ComponentProps) {
-  const { appointments, date } = loaderData;
-  const [searchParams, setSearchParams] = useSearchParams();
 
   return (
     <Card>
@@ -35,39 +27,7 @@ export default function Turnos({ loaderData }: Route.ComponentProps) {
         <Badge>{appointments.length}</Badge>
       </CardHeader>
       <CardContent>
-        <div className="mb-4 flex gap-3">
-          <Input
-            type="date"
-            defaultValue={date}
-            className="w-auto"
-            onChange={(e) => {
-              const params = new URLSearchParams(searchParams);
-              if (e.target.value) {
-                params.set("date", e.target.value);
-              } else {
-                params.delete("date");
-              }
-              setSearchParams(params, { replace: true });
-            }}
-          />
-          <select
-            className="border border-border bg-background px-3 py-2 font-mono text-[0.8rem] outline-none focus:border-primary"
-            defaultValue={searchParams.get("status") ?? ""}
-            onChange={(e) => {
-              const params = new URLSearchParams(searchParams);
-              if (e.target.value) {
-                params.set("status", e.target.value);
-              } else {
-                params.delete("status");
-              }
-              setSearchParams(params, { replace: true });
-            }}
-          >
-            <option value="">Todos</option>
-            <option value="scheduled">Activos</option>
-            <option value="cancelled">Cancelados</option>
-          </select>
-        </div>
+        <TurnosFilters defaultDate={date ?? ""} defaultStatus={status ?? ""} />
         <Table>
           <TableHeader>
             <TableRow>
