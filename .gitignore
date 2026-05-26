@@ -10,3 +10,5 @@ data/
 tsconfig.tsbuildinfo
 .agents/
 skills-lock.json
+
+/app/generated/prisma

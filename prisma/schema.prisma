@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Hospital {
+  id           String        @id @default(uuid())
+  name         String
+  address      String
+  lat          Float
+  lng          Float
+  appointments Appointment[]
+  doctors      Doctor[]
+
+  @@map("hospitals")
+}
+
+model Patient {
+  id           String        @id @default(uuid())
+  name         String
+  email        String?       @unique
+  phone        String?
+  created_at   DateTime      @default(now())
+  appointments Appointment[]
+
+  @@map("patients")
+}
+
+model Doctor {
+  id           String        @id @default(uuid())
+  name         String
+  specialty    String
+  hospital_id  String
+  appointments Appointment[]
+  hospital     Hospital      @relation(fields: [hospital_id], references: [id])
+
+  @@map("doctors")
+}
+
+model Appointment {
+  id          String   @id @default(uuid())
+  hospital_id String
+  patient_id  String
+  doctor_id   String
+  date        String
+  time        String
+  status      String   @default("scheduled")
+  created_at  DateTime @default(now())
+  doctor      Doctor   @relation(fields: [doctor_id], references: [id])
+  patient     Patient  @relation(fields: [patient_id], references: [id])
+  hospital    Hospital @relation(fields: [hospital_id], references: [id])
+
+  @@map("appointments")
+}

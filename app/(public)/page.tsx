@@ -1,4 +1,4 @@
-import { getDb } from "../server/db.server";
+import { getDb } from "../../server/db.server";
 import { StatCard } from "~/components/stat-card";
 import { BarChart } from "~/components/bar-chart";
 import { Badge } from "~/components/ui/badge";
