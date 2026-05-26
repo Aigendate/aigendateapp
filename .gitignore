@@ -10,5 +10,6 @@ data/
 tsconfig.tsbuildinfo
 .agents/
 skills-lock.json
+.react-router/
 
 /app/generated/prisma
