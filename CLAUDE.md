@@ -6,11 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run dev          # Next.js dev server on port 3456
-npm test             # Run all 32 tests (vitest)
+npm test             # Run all tests (vitest)
 npm run test:watch   # Tests in watch mode
 npx vitest run tests/server/db.test.ts  # Single test file
 npm run typecheck    # tsc --noEmit
 npm run seed         # Seed DB from data/ CSVs (247 hospitals, 20 doctors, 10 patients)
+npm run scrape       # Re-fetch hospital CSVs from public APIs (requires pip install requests)
 npm run build        # Production build (next build)
 npm start            # Production server (next start)
 npm run mcp:stdio    # MCP server on stdio (for Claude Code)
@@ -32,6 +33,7 @@ Next.js 15 App Router serves both the SSR UI and the MCP HTTP endpoint as a sing
 - Accepts `:memory:` for tests, defaults to `process.cwd()/turnos.db`
 - `server/db.server.ts` re-exports everything (kept for the `.server.ts` convention even though Next App Router doesn't require it — Server Components already exclude server-only modules from client bundles)
 - `better-sqlite3` is listed in `serverExternalPackages` in `next.config.ts` so Next doesn't try to bundle the native addon
+- Four tables: `hospitals`, `doctors`, `patients`, `appointments`. WAL mode, foreign keys enforced. DB file (`turnos.db`) is created in the project root on first run
 
 ### MCP
 
@@ -73,6 +75,10 @@ Test files: `tests/server/db.test.ts` (DB queries), `tests/server/mcp.test.ts` (
 - DB paths use `process.cwd()`, not `import.meta.url`
 - Imports of `.ts` source files from other `.ts` files use bare paths (no `.js` extension) so the Next bundler resolves them. The standalone scripts (`mcp-stdio.ts`, `seed.ts`) run via `tsx`, which also accepts bare paths.
 - The `~` alias resolves to `./app` via tsconfig `paths`
+
+## MCP connection
+
+`.mcp.json` in the project root has a hardcoded path — update it to your local checkout before using `npm run mcp:stdio` with Claude Code.
 
 ## Data
 

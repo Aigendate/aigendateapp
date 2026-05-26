@@ -1,4 +1,4 @@
-import { getDb, listPatients } from "../../server/db.server";
+import { getDb, listPatients } from "../../../server/db.server";
 import { Card, CardHeader, CardTitle, CardContent } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { SearchInput } from "~/components/search-input";

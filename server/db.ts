@@ -253,6 +253,70 @@ export function listAppointments(
     .all(...values) as Appointment[];
 }
 
+// --- Update / Delete helpers ---
+
+export function updatePatient(
+  db: Database.Database,
+  id: string,
+  params: { name?: string; email?: string; phone?: string }
+): void {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (params.name !== undefined) { sets.push("name = ?"); values.push(params.name); }
+  if (params.email !== undefined) { sets.push("email = ?"); values.push(params.email); }
+  if (params.phone !== undefined) { sets.push("phone = ?"); values.push(params.phone); }
+  if (sets.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE patients SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+}
+
+export function deletePatient(db: Database.Database, id: string): void {
+  db.prepare("DELETE FROM appointments WHERE patient_id = ?").run(id);
+  db.prepare("DELETE FROM patients WHERE id = ?").run(id);
+}
+
+export function updateHospital(
+  db: Database.Database,
+  id: string,
+  params: { name?: string; address?: string; lat?: number; lng?: number }
+): void {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (params.name !== undefined) { sets.push("name = ?"); values.push(params.name); }
+  if (params.address !== undefined) { sets.push("address = ?"); values.push(params.address); }
+  if (params.lat !== undefined) { sets.push("lat = ?"); values.push(params.lat); }
+  if (params.lng !== undefined) { sets.push("lng = ?"); values.push(params.lng); }
+  if (sets.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE hospitals SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+}
+
+export function deleteHospital(db: Database.Database, id: string): void {
+  db.prepare("DELETE FROM appointments WHERE hospital_id = ?").run(id);
+  db.prepare("DELETE FROM doctors WHERE hospital_id = ?").run(id);
+  db.prepare("DELETE FROM hospitals WHERE id = ?").run(id);
+}
+
+export function updateDoctor(
+  db: Database.Database,
+  id: string,
+  params: { name?: string; specialty?: string; hospital_id?: string }
+): void {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (params.name !== undefined) { sets.push("name = ?"); values.push(params.name); }
+  if (params.specialty !== undefined) { sets.push("specialty = ?"); values.push(params.specialty); }
+  if (params.hospital_id !== undefined) { sets.push("hospital_id = ?"); values.push(params.hospital_id); }
+  if (sets.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE doctors SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+}
+
+export function deleteDoctor(db: Database.Database, id: string): void {
+  db.prepare("DELETE FROM appointments WHERE doctor_id = ?").run(id);
+  db.prepare("DELETE FROM doctors WHERE id = ?").run(id);
+}
+
 export function cancelAppointment(
   db: Database.Database,
   id: string

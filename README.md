@@ -2,23 +2,32 @@
 
 Hospital appointment scheduling for Paraguay. React Router 7 frontend with an MCP server for AI assistant integration.
 
-247 real hospitals from OpenStreetMap, 20 doctors across 10 specialties, patient registration, and appointment management — all backed by SQLite.
+248 real hospitals from OpenStreetMap, 20 doctors across 10 specialties, patient registration, and appointment management — all backed by SQLite.
 
 ## Quick Start
 
 ```bash
 npm install
-npm run seed        # populate the database
+npm run seed        # populate the database (10 fallback hospitals)
 npm run dev         # http://localhost:3456
 ```
 
-The seed script works without scraped data — it includes 10 fallback hospitals. For the full 247-hospital dataset, run the scraper first:
+## Populate Hospitals from OpenStreetMap
+
+For the full 248-hospital dataset with real coordinates from Paraguay:
 
 ```bash
-pip install -r scraper/requirements.txt
-npm run scrape      # fetch hospital CSVs into data/
-npm run seed        # populate SQLite from CSVs
+pip install -r scraper/requirements.txt   # install Python dependencies
+npm run scrape                            # fetch hospital CSVs from OSM into scraper/data/
+node --import tsx populate-hospitals.ts    # insert hospitals into SQLite (clears existing data)
+npm run seed                               # seed doctors, patients, appointments
 ```
+
+`npm run scrape` downloads facility data from OpenStreetMap (and optionally healthsites.io, WHO, World Bank) into `scraper/data/osm_facilities.csv`.
+
+`populate-hospitals.ts` reads that CSV, filters for `facility_type === "hospital"` with valid coordinates, clears the existing `hospitals` table (and cascades to dependent rows), and inserts all matching hospitals. After running it, you must re-run `npm run seed` to recreate doctors, patients, and appointments.
+
+The seed script (`npm run seed`) also reads `data/osm_facilities.csv` but looks in the `data/` directory at the project root. If the CSV is not found there, it falls back to 10 hardcoded hospitals.
 
 ## Scripts
 
@@ -33,6 +42,7 @@ npm run seed        # populate SQLite from CSVs
 | `npm run seed` | Seed DB from CSV data |
 | `npm run mcp:stdio` | Start MCP server (stdio transport) |
 | `npm run scrape` | Re-fetch hospital data from public APIs |
+| `node --import tsx populate-hospitals.ts` | Insert OSM hospitals into SQLite (clears existing data) |
 
 ## Project Structure
 
@@ -59,6 +69,7 @@ data/                    CSV source files for seeding
 tests/                   Vitest test suite
 server.ts                Express server (RR7 + MCP HTTP)
 mcp-stdio.ts             MCP stdio entry (for Claude Code)
+populate-hospitals.ts   Insert OSM hospitals into SQLite (clears all tables, re-seed after)
 seed.ts                  Database seeding script
 ```
 
@@ -110,7 +121,7 @@ The `.mcp.json` in the project root configures Claude Code automatically. Or add
 - **Server**: Express 5, MCP SDK (stdio + HTTP)
 - **Database**: SQLite via better-sqlite3
 - **Testing**: Vitest (33 tests)
-- **Data**: OpenStreetMap Paraguay hospital data (247 facilities)
+- **Data**: OpenStreetMap Paraguay hospital data (248 facilities)
 
 ## Scraper
 
@@ -121,4 +132,4 @@ pip install -r scraper/requirements.txt
 npm run scrape
 ```
 
-Output goes to `data/`. Re-run `npm run seed` after scraping to update the database.
+Output goes to `scraper/data/`. To populate the database with the scraped hospitals, run `node --import tsx populate-hospitals.ts` followed by `npm run seed`.
