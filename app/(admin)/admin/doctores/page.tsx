@@ -33,7 +33,7 @@ export default async function AdminDoctoresPage({
 
   return (
     <>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-2xl font-extrabold tracking-tight">Doctores</h1>
           <Badge>{doctors.length}</Badge>

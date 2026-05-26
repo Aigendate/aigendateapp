@@ -11,10 +11,10 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="relative z-1 mx-auto max-w-[1280px] px-6 py-8 md:px-10">
-      <header className="mb-10 flex items-center justify-between border-b-2 border-foreground pb-5">
+      <header className="mb-10 flex flex-col gap-4 border-b-2 border-foreground pb-5 sm:flex-row sm:items-center sm:justify-between">
         <Link href="/" aria-label="Aigendate">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Aigendate" className="h-12 w-auto" />
+          <img src="/logo.svg" alt="Aigendate" className="h-10 w-auto sm:h-12" />
         </Link>
         <div className="flex items-center gap-4">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">
