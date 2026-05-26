@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" role="img" aria-label="Aigendate">
+  <title>Aigendate</title>
+  <g fill="none" stroke="#1A6B5A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="6" y="14" width="52" height="44" rx="3"/>
+    <line x1="6" y1="24" x2="58" y2="24"/>
+    <path d="M14 41 L22 41 L26 33 L30 49 L34 35 L38 41 L50 41"/>
+  </g>
+  <g fill="#1A6B5A">
+    <rect x="17" y="7" width="5" height="12" rx="1.5"/>
+    <rect x="42" y="7" width="5" height="12" rx="1.5"/>
+  </g>
+  <text x="76" y="44" font-family="'Anybody', 'Inter', system-ui, sans-serif" font-size="30" font-weight="600" fill="#1A6B5A" letter-spacing="-0.5">Aigendate</text>
+</svg>

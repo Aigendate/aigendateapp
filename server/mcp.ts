@@ -9,7 +9,7 @@ import {
   createAppointment,
   listAppointments,
   cancelAppointment,
-} from "./db.js";
+} from "./db";
 
 export function createMcpServer(dbPath?: string): McpServer {
   const server = new McpServer({ name: "turnos", version: "1.0.0" });
