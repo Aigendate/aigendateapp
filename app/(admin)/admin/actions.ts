@@ -139,6 +139,204 @@ export async function deleteAppointment(formData: FormData) {
   revalidateAdmin();
 }
 
+export async function rescheduleAppointment(formData: FormData) {
+  const id = formData.get("id") as string;
+  const date = formData.get("date") as string;
+  const time = formData.get("time") as string;
+  await prisma.appointment.update({
+    where: { id },
+    data: { date, time },
+  });
+  revalidateAdmin();
+}
+
+export async function cancelAndOfferWaitlist(formData: FormData): Promise<{
+  ok: boolean;
+  message: string;
+  candidates: { id: string; patient_name: string; patient_phone: string | null }[];
+}> {
+  const id = formData.get("id") as string;
+
+  const appointment = await prisma.appointment.update({
+    where: { id },
+    data: { status: "cancelled" },
+    include: { doctor: { select: { specialty: true } } },
+  });
+
+  const candidates = await prisma.waitlistEntry.findMany({
+    where: {
+      status: "waiting",
+      specialty: appointment.doctor.specialty,
+      OR: [
+        { doctor_id: appointment.doctor_id },
+        { doctor_id: null },
+      ],
+      date_from: { lte: appointment.date },
+      date_to: { gte: appointment.date },
+    },
+    include: { patient: { select: { name: true, phone: true } } },
+    orderBy: [{ priority: "desc" }, { created_at: "asc" }],
+    take: 5,
+  });
+
+  revalidateAdmin();
+
+  return {
+    ok: true,
+    message: candidates.length > 0
+      ? `Turno cancelado. ${candidates.length} paciente(s) en lista de espera.`
+      : "Turno cancelado. No hay pacientes en lista de espera para este horario.",
+    candidates: candidates.map((c) => ({
+      id: c.id,
+      patient_name: c.patient.name,
+      patient_phone: c.patient.phone,
+    })),
+  };
+}
+
+export async function offerSlotToWaitlistEntry(formData: FormData) {
+  const waitlistId = formData.get("waitlist_id") as string;
+  const appointmentDate = formData.get("date") as string;
+  const appointmentTime = formData.get("time") as string;
+  const doctorId = formData.get("doctor_id") as string;
+  const hospitalId = formData.get("hospital_id") as string;
+
+  const entry = await prisma.waitlistEntry.update({
+    where: { id: waitlistId },
+    data: { status: "offered" },
+  });
+
+  await prisma.appointment.create({
+    data: {
+      patient_id: entry.patient_id,
+      doctor_id: doctorId,
+      hospital_id: hospitalId,
+      date: appointmentDate,
+      time: appointmentTime,
+    },
+  });
+
+  revalidateAdmin();
+}
+
+// --- Lista de Espera ---
+
+export async function createWaitlistEntry(formData: FormData) {
+  await prisma.waitlistEntry.create({
+    data: {
+      patient_id: formData.get("patient_id") as string,
+      doctor_id: (formData.get("doctor_id") as string) || null,
+      specialty: formData.get("specialty") as string,
+      date_from: formData.get("date_from") as string,
+      date_to: formData.get("date_to") as string,
+      time_pref: (formData.get("time_pref") as string) || null,
+      priority: parseInt(formData.get("priority") as string) || 0,
+    },
+  });
+  revalidateAdmin();
+}
+
+export async function deleteWaitlistEntry(formData: FormData) {
+  const id = formData.get("id") as string;
+  await prisma.waitlistEntry.delete({ where: { id } });
+  revalidateAdmin();
+}
+
+// --- Horarios de Doctor ---
+
+export async function saveDoctorSchedule(formData: FormData) {
+  const doctorId = formData.get("doctor_id") as string;
+  const dayOfWeek = parseInt(formData.get("day_of_week") as string);
+  const startTime = formData.get("start_time") as string;
+  const endTime = formData.get("end_time") as string;
+  const slotDuration = parseInt(formData.get("slot_duration") as string) || 30;
+
+  await prisma.doctorSchedule.upsert({
+    where: { doctor_id_day_of_week: { doctor_id: doctorId, day_of_week: dayOfWeek } },
+    update: { start_time: startTime, end_time: endTime, slot_duration: slotDuration },
+    create: { doctor_id: doctorId, day_of_week: dayOfWeek, start_time: startTime, end_time: endTime, slot_duration: slotDuration },
+  });
+  revalidateAdmin();
+}
+
+export async function getAvailableSlots(doctorId: string, date: string): Promise<string[]> {
+  const dayOfWeek = new Date(date + "T12:00:00").getDay();
+
+  const schedule = await prisma.doctorSchedule.findUnique({
+    where: { doctor_id_day_of_week: { doctor_id: doctorId, day_of_week: dayOfWeek } },
+  });
+  if (!schedule) return [];
+
+  const existing = await prisma.appointment.findMany({
+    where: { doctor_id: doctorId, date, status: "scheduled" },
+    select: { time: true },
+  });
+  const bookedTimes = new Set(existing.map((a) => a.time));
+
+  const slots: string[] = [];
+  const [startH, startM] = schedule.start_time.split(":").map(Number);
+  const [endH, endM] = schedule.end_time.split(":").map(Number);
+  let current = startH * 60 + startM;
+  const end = endH * 60 + endM;
+
+  while (current + schedule.slot_duration <= end) {
+    const h = String(Math.floor(current / 60)).padStart(2, "0");
+    const m = String(current % 60).padStart(2, "0");
+    const timeStr = `${h}:${m}`;
+    if (!bookedTimes.has(timeStr)) {
+      slots.push(timeStr);
+    }
+    current += schedule.slot_duration;
+  }
+
+  return slots;
+}
+
+// --- Turnos Recurrentes ---
+
+export async function createRecurringAppointment(formData: FormData) {
+  const hospitalId = formData.get("hospital_id") as string;
+  const patientId = formData.get("patient_id") as string;
+  const doctorId = formData.get("doctor_id") as string;
+  const startDate = formData.get("date") as string;
+  const time = formData.get("time") as string;
+  const weeksInterval = parseInt(formData.get("weeks_interval") as string) || 1;
+  const occurrences = parseInt(formData.get("occurrences") as string) || 4;
+
+  const parent = await prisma.appointment.create({
+    data: {
+      hospital_id: hospitalId,
+      patient_id: patientId,
+      doctor_id: doctorId,
+      date: startDate,
+      time,
+      is_recurring: true,
+      recurrence_rule: `weekly:${weeksInterval}`,
+    },
+  });
+
+  const childData = [];
+  for (let i = 1; i < occurrences; i++) {
+    const d = new Date(startDate + "T12:00:00");
+    d.setDate(d.getDate() + 7 * weeksInterval * i);
+    childData.push({
+      hospital_id: hospitalId,
+      patient_id: patientId,
+      doctor_id: doctorId,
+      date: d.toISOString().split("T")[0],
+      time,
+      is_recurring: true,
+      recurrence_rule: `weekly:${weeksInterval}`,
+      parent_appointment_id: parent.id,
+    });
+  }
+  if (childData.length > 0) {
+    await prisma.appointment.createMany({ data: childData });
+  }
+
+  revalidateAdmin();
+}
+
 // --- Scrape & Seed ---
 
 import { execFile } from "node:child_process";
@@ -226,7 +424,8 @@ const PATIENT_NAMES = [
   { name: "Santiago Acosta", email: "santiago.acosta@email.com", phone: "+595 21 555-0012" },
   { name: "Mía Villalba", email: "mia.villalba@email.com", phone: "+595 21 555-0013" },
   { name: "Nicolás Giménez", email: "nicolas.gimenez@email.com", phone: "+595 21 555-0014" },
-  { name: "Catalina Espínola", email: "catalina.espinola@email.com", phone: "+595 21 555-0015" },
+  { name: "Catalina Espínola", email: "catalina.espinola@email.com", phone: "0983451455" },
+  { name: "Silvio Sisa", email: "silvio.sisa@email.com", phone: "0983451455" },
 ];
 
 const TIMES = ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "14:00", "14:30", "15:00", "15:30", "16:00"];
@@ -248,7 +447,7 @@ export async function scrapeAndSeed(): Promise<{ ok: boolean; message: string }>
     await prisma.doctor.createMany({
       data: DOCTOR_NAMES.map((name) => ({
         name,
-        specialty: pick(SPECIALTIES),
+        specialty: name === "Dr. Andrea Fleitas" ? "Cardiología" : pick(SPECIALTIES),
         hospital_id: pick(hospitals).id,
       })),
     });
@@ -283,6 +482,40 @@ export async function scrapeAndSeed(): Promise<{ ok: boolean; message: string }>
       else scheduledCount++;
     }
     await prisma.appointment.createMany({ data: appointmentData });
+
+    // Turno fijo: Catalina Espínola con Dr. Andrea Fleitas, viernes 2026-05-29
+    const catalina = await prisma.patient.findFirst({ where: { name: "Catalina Espínola" } });
+    const silvio = await prisma.patient.findFirst({ where: { name: "Silvio Sisa" } });
+    const fleitas = await prisma.doctor.findFirst({ where: { name: "Dr. Andrea Fleitas" } });
+    if (catalina && fleitas) {
+      await prisma.appointment.create({
+        data: {
+          patient_id: catalina.id,
+          doctor_id: fleitas.id,
+          hospital_id: fleitas.hospital_id,
+          date: "2026-05-29",
+          time: "09:30",
+          status: "scheduled",
+        },
+      });
+      scheduledCount++;
+    }
+
+    // Silvio Sisa en lista de espera para Cardiología con Dr. Andrea Fleitas
+    if (silvio && fleitas) {
+      await prisma.waitlistEntry.create({
+        data: {
+          patient_id: silvio.id,
+          doctor_id: fleitas.id,
+          specialty: "Cardiología",
+          date_from: "2026-05-26",
+          date_to: "2026-06-30",
+          time_pref: "morning",
+          priority: 5,
+          status: "waiting",
+        },
+      });
+    }
 
     revalidateAdmin();
     return {

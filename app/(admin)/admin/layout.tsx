@@ -6,8 +6,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="relative z-1 flex min-h-screen">
       <Sidebar />
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-border bg-card px-8 py-4">
-          <div className="font-display text-lg font-extrabold tracking-tight">
+        <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3 md:px-8 md:py-4">
+          <div className="pl-10 font-display text-lg font-extrabold tracking-tight md:pl-0">
             Aigendate Admin
           </div>
           <Link
@@ -17,7 +17,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             Volver al sitio
           </Link>
         </header>
-        <main className="flex-1 overflow-y-auto p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">{children}</main>
       </div>
     </div>
   );

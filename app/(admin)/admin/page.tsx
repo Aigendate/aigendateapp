@@ -44,7 +44,7 @@ export default async function AdminPage() {
     <>
       <h1 className="mb-6 font-display text-2xl font-extrabold tracking-tight">Dashboard</h1>
 
-      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Hospitales" value={hospitals} color="primary" delay={0} />
         <StatCard label="Pacientes" value={patients} color="accent" delay={0.06} />
         <StatCard label="Doctores" value={doctors} color="purple" delay={0.12} />

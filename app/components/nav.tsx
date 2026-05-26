@@ -16,7 +16,7 @@ export function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="mb-8 flex gap-0 border-b border-border">
+    <nav className="mb-8 flex gap-0 overflow-x-auto border-b border-border">
       {navItems.map((item) => {
         const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         return (

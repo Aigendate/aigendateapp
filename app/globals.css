@@ -58,6 +58,43 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Schedule-X theme overrides */
+:root {
+  --sx-color-primary: #1A6B5A;
+  --sx-color-on-primary: #fff;
+  --sx-color-primary-container: #D2EDE6;
+  --sx-color-on-primary-container: #0d3d31;
+  --sx-color-secondary: #C4510A;
+  --sx-color-on-secondary: #fff;
+  --sx-color-secondary-container: #F4DFC8;
+  --sx-color-on-secondary-container: #7a3206;
+  --sx-color-surface: #FFFCF8;
+  --sx-color-surface-dim: #F6F1EB;
+  --sx-color-surface-bright: #FFFCF8;
+  --sx-color-on-surface: #1A1A18;
+  --sx-color-surface-container: #F6F1EB;
+  --sx-color-surface-container-low: #F6F1EB;
+  --sx-color-surface-container-high: #f0ebe3;
+  --sx-color-background: #F6F1EB;
+  --sx-color-on-background: #1A1A18;
+  --sx-color-outline: #E0D9CF;
+  --sx-color-outline-variant: #E0D9CF;
+  --sx-color-shadow: #000;
+  --sx-color-surface-tint: #1A6B5A;
+  --sx-color-neutral: #6B6860;
+  --sx-color-neutral-variant: #E0D9CF;
+  --sx-internal-color-gray-ripple-background: #f0ebe3;
+  --sx-internal-color-light-gray: #F6F1EB;
+  --sx-internal-color-text: #1A1A18;
+}
+
+.sx-react-calendar-wrapper {
+  width: 100%;
+  height: 800px;
+  max-height: 85vh;
+  font-family: "DM Mono", monospace;
+}
+
 .animate-slide-up {
   animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
