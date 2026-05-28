@@ -65,7 +65,7 @@ async function dispatch(name: string, args: Record<string, unknown>): Promise<st
         return "No encontré doctores con esos criterios. / No doctors found.";
       return rows
         .slice(0, MAX_RESULTS)
-        .map((d) => `Dr. ${d.name} — ${d.specialty} en ${d.hospital_name} [doctor_id: ${d.id}, hospital_id: ${d.hospital_id}]`)
+        .map((d) => `${d.name} — ${d.specialty} en ${d.hospital_name} [doctor_id: ${d.id}, hospital_id: ${d.hospital_id}]`)
         .join("; ");
     }
 
@@ -109,7 +109,7 @@ async function dispatch(name: string, args: Record<string, unknown>): Promise<st
       if (!id) return "Necesito el identificador del turno para cancelarlo. / An appointment id is required.";
       const res = await cancelAppointment(id);
       if (!res.ok) return res.error;
-      return `Turno cancelado: ${res.appointment.date} ${res.appointment.time} con Dr. ${res.appointment.doctor_name}.`;
+      return `Turno cancelado: ${res.appointment.date} ${res.appointment.time} con ${res.appointment.doctor_name}.`;
     }
 
     default:

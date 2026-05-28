@@ -125,7 +125,7 @@ const assistant = {
     messages: [{ role: "system", content: SYSTEM_PROMPT }],
     tools,
   },
-  voice: { provider: "vapi", voiceId: "Paola" },
+  voice: { provider: "vapi", voiceId: "Gustavo" },
   transcriber: { provider: "deepgram", model: "nova-3", language: "multi" },
 };
 
