@@ -48,7 +48,7 @@ async function dispatch(name: string, args: Record<string, unknown>): Promise<st
   switch (name) {
     case "buscar_hospitales": {
       const rows = await listHospitals({ name: str(args.nombre) });
-      if (rows.length === 0) return "No encontré hospitales con ese nombre. / No hospitals found.";
+      if (rows.length === 0) return "No encontré hospitales con ese nombre.";
       return rows
         .slice(0, MAX_RESULTS)
         .map((h) => `${h.name} (${h.address}) [id: ${h.id}]`)
@@ -63,7 +63,7 @@ async function dispatch(name: string, args: Record<string, unknown>): Promise<st
         city: str(args.ciudad),
       });
       if (rows.length === 0)
-        return "No encontré doctores con esos criterios. / No doctors found.";
+        return "No encontré doctores con esos criterios.";
       return rows
         .slice(0, MAX_RESULTS)
         .map((d) => `${d.name} — ${d.specialty} en ${d.hospital_name} [doctor_id: ${d.id}, hospital_id: ${d.hospital_id}]`)
@@ -73,7 +73,7 @@ async function dispatch(name: string, args: Record<string, unknown>): Promise<st
     case "buscar_paciente": {
       const rows = await listPatients(str(args.nombre));
       if (rows.length === 0)
-        return "No encontré ningún paciente registrado con ese nombre. / No patient found — register them first.";
+        return "No encontré ningún paciente registrado con ese nombre. Hay que registrarlo primero.";
       return rows
         .slice(0, MAX_RESULTS)
         .map((p) => `${p.name}${p.phone ? ` (${p.phone})` : ""} [patient_id: ${p.id}]`)
@@ -82,7 +82,7 @@ async function dispatch(name: string, args: Record<string, unknown>): Promise<st
 
     case "registrar_paciente": {
       const nombre = str(args.nombre);
-      if (!nombre) return "Necesito el nombre del paciente para registrarlo. / A name is required.";
+      if (!nombre) return "Necesito el nombre del paciente para registrarlo.";
       const res = await registerPatient({
         name: nombre,
         phone: str(args.telefono),
@@ -99,7 +99,7 @@ async function dispatch(name: string, args: Record<string, unknown>): Promise<st
       const date = str(args.fecha);
       const time = str(args.hora);
       if (!hospital_id || !patient_id || !doctor_id || !date || !time)
-        return "Faltan datos para agendar (hospital, paciente, doctor, fecha y hora). / Missing booking details.";
+        return "Faltan datos para agendar (hospital, paciente, doctor, fecha y hora).";
       const res = await createAppointment({ hospital_id, patient_id, doctor_id, date, time });
       if (!res.ok) return res.error;
       return `Turno agendado para el ${res.appointment.date} a las ${res.appointment.time}. [turno_id: ${res.appointment.id}]`;
@@ -107,7 +107,7 @@ async function dispatch(name: string, args: Record<string, unknown>): Promise<st
 
     case "cancelar_turno": {
       const id = str(args.turno_id);
-      if (!id) return "Necesito el identificador del turno para cancelarlo. / An appointment id is required.";
+      if (!id) return "Necesito el identificador del turno para cancelarlo.";
       const res = await cancelAppointment(id);
       if (!res.ok) return res.error;
       return `Turno cancelado: ${res.appointment.date} ${res.appointment.time} con ${res.appointment.doctor_name}.`;
@@ -148,7 +148,7 @@ export async function POST(request: Request): Promise<Response> {
       } catch (err) {
         return {
           toolCallId: tc.id,
-          result: `Ocurrió un error procesando la solicitud. / An error occurred. (${
+          result: `Ocurrió un error procesando la solicitud. (${
             err instanceof Error ? err.message : "unknown"
           })`,
         };

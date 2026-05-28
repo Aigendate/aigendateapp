@@ -41,8 +41,7 @@ const fn = (
     ...(filler ? [{ type: "request-start", content: filler }] : []),
     {
       type: "request-failed",
-      content:
-        "Disculpá, tuve un problemita con eso. / Sorry, I had trouble with that.",
+      content: "Disculpá, tuve un problemita con eso.",
     },
   ],
 });
@@ -50,7 +49,7 @@ const fn = (
 const tools = [
   fn(
     "buscar_hospitales",
-    "Busca hospitales por nombre O por ciudad/zona (busca en nombre y dirección). Devuelve nombre, dirección e id. / Search hospitals by name or city.",
+    "Busca hospitales por nombre O por ciudad/zona (busca en nombre y dirección). Devuelve nombre, dirección e id.",
     {
       nombre: {
         type: "string",
@@ -60,7 +59,7 @@ const tools = [
   ),
   fn(
     "buscar_doctores",
-    "Busca doctores por especialidad y/o ciudad y/o nombre. Devuelve doctor_id y hospital_id con el hospital de cada uno. Esta es la forma preferida de empezar cuando el paciente menciona una especialidad. / Search doctors by specialty/city.",
+    "Busca doctores por especialidad y/o ciudad y/o nombre. Devuelve doctor_id y hospital_id con el hospital de cada uno. Esta es la forma preferida de empezar cuando el paciente menciona una especialidad.",
     {
       especialidad: { type: "string", description: "Especialidad, ej. cardiología (recomendado)" },
       ciudad: { type: "string", description: "Ciudad o zona para acotar, ej. Asunción (opcional)" },
@@ -70,13 +69,13 @@ const tools = [
   ),
   fn(
     "buscar_paciente",
-    "Busca un paciente ya registrado por nombre. Devuelve patient_id. / Find an existing patient by name.",
+    "Busca un paciente ya registrado por nombre. Devuelve patient_id.",
     { nombre: { type: "string", description: "Nombre del paciente" } },
     ["nombre"],
   ),
   fn(
     "registrar_paciente",
-    "Registra un nuevo paciente. Devuelve patient_id. Usar solo si buscar_paciente no lo encuentra. / Register a new patient.",
+    "Registra un nuevo paciente. Devuelve patient_id. Usar solo si buscar_paciente no lo encuentra.",
     {
       nombre: { type: "string", description: "Nombre completo del paciente" },
       telefono: { type: "string", description: "Teléfono (opcional)" },
@@ -87,7 +86,7 @@ const tools = [
   ),
   fn(
     "agendar_turno",
-    "Agenda un turno. Requiere hospital_id, patient_id, doctor_id, fecha (YYYY-MM-DD) y hora (HH:MM, 24h). / Book an appointment.",
+    "Agenda un turno. Requiere hospital_id, patient_id, doctor_id, fecha (YYYY-MM-DD) y hora (HH:MM, 24h).",
     {
       hospital_id: { type: "string", description: "id del hospital (de buscar_doctores)" },
       patient_id: { type: "string", description: "patient_id" },
@@ -100,7 +99,7 @@ const tools = [
   ),
   fn(
     "cancelar_turno",
-    "Cancela un turno por su identificador. / Cancel an appointment by id.",
+    "Cancela un turno por su identificador.",
     { turno_id: { type: "string", description: "turno_id devuelto al agendar" } },
     ["turno_id"],
     "Ok, lo cancelo…",
@@ -110,7 +109,7 @@ const tools = [
 const SYSTEM_PROMPT = `Sos Sofía, recepcionista de "Turnos PY", que agenda turnos médicos por teléfono en Paraguay. Hablás como una persona real, cálida y relajada — no como un sistema automático.
 
 CÓMO HABLÁS:
-- Español paraguayo natural, con voseo ("querés", "fijate", "dale", "mirá"). Si la persona te habla en inglés, seguila en inglés. Nunca repitas la misma frase en dos idiomas.
+- Español paraguayo natural, con voseo ("querés", "fijate", "dale", "mirá"). Hablás siempre en español.
 - Frases cortas y variadas. No uses siempre la misma fórmula. Suena a charla, no a formulario.
 - Usá pequeños reconocimientos antes de seguir: "Dale", "Perfecto", "Buenísimo", "Ahí va".
 - NO narres lo que hacés por dentro. Nunca digas "voy a buscar", "déjame consultar el sistema" ni "procesando". Simplemente hacé la consulta y contá lo que encontraste.
@@ -147,7 +146,7 @@ const assistant = {
     tools,
   },
   voice: { provider: "vapi", voiceId: "Gustavo" },
-  transcriber: { provider: "deepgram", model: "nova-3", language: "multi" },
+  transcriber: { provider: "deepgram", model: "nova-3", language: "es" },
 };
 
 const url = EXISTING_ID
