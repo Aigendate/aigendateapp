@@ -13,6 +13,7 @@ export interface Hospital {
   id: string;
   name: string;
   address: string;
+  city: string | null;
   lat: number;
   lng: number;
 }
@@ -66,26 +67,27 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 export async function insertHospital(
-  params: { name: string; address: string; lat: number; lng: number }
+  params: { name: string; address: string; city?: string | null; lat: number; lng: number }
 ): Promise<string> {
   const [row] = await db.insert(hospitals).values(params).returning({ id: hospitals.id });
   return row.id;
 }
 
 export async function listHospitals(
-  opts: { name?: string; lat?: number; lng?: number } = {}
+  opts: { name?: string; city?: string; lat?: number; lng?: number } = {}
 ): Promise<(Hospital & { distance_km?: number })[]> {
+  const conditions = [
+    opts.name
+      ? or(ilike(hospitals.name, `%${opts.name}%`), ilike(hospitals.address, `%${opts.name}%`))
+      : undefined,
+    opts.city ? ilike(hospitals.city, `%${opts.city}%`) : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+
   const rows = await db
     .select()
     .from(hospitals)
-    .where(
-      opts.name
-        ? or(
-            ilike(hospitals.name, `%${opts.name}%`),
-            ilike(hospitals.address, `%${opts.name}%`),
-          )
-        : undefined,
-    );
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(asc(hospitals.city), asc(hospitals.name));
 
   if (opts.lat !== undefined && opts.lng !== undefined) {
     return rows
@@ -96,6 +98,30 @@ export async function listHospitals(
       .sort((a, b) => a.distance_km - b.distance_km);
   }
   return rows;
+}
+
+export async function getHospital(id: string): Promise<Hospital | null> {
+  const [row] = await db.select().from(hospitals).where(eq(hospitals.id, id)).limit(1);
+  return row ?? null;
+}
+
+// Distinct cities with hospital counts, busiest first. NULL city ("Sin
+// especificar") sorts last so the UI can render it as a trailing group.
+export async function listCities(): Promise<{ city: string | null; count: number }[]> {
+  return db
+    .select({ city: hospitals.city, count: sql<number>`count(*)::int` })
+    .from(hospitals)
+    .groupBy(hospitals.city)
+    .orderBy(sql`${hospitals.city} is null`, asc(hospitals.city));
+}
+
+// Distinct specialties with doctor counts, most doctors first.
+export async function listSpecialties(): Promise<{ specialty: string; count: number }[]> {
+  return db
+    .select({ specialty: doctors.specialty, count: sql<number>`count(*)::int` })
+    .from(doctors)
+    .groupBy(doctors.specialty)
+    .orderBy(asc(doctors.specialty));
 }
 
 export async function insertDoctor(
@@ -274,11 +300,12 @@ export async function deletePatient(id: string): Promise<void> {
 
 export async function updateHospital(
   id: string,
-  params: { name?: string; address?: string; lat?: number; lng?: number }
+  params: { name?: string; address?: string; city?: string | null; lat?: number; lng?: number }
 ): Promise<void> {
   const data: Record<string, unknown> = {};
   if (params.name !== undefined) data.name = params.name;
   if (params.address !== undefined) data.address = params.address;
+  if (params.city !== undefined) data.city = params.city;
   if (params.lat !== undefined) data.lat = params.lat;
   if (params.lng !== undefined) data.lng = params.lng;
   if (Object.keys(data).length === 0) return;

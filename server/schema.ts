@@ -20,6 +20,7 @@ export const hospitals = pgTable("hospitals", {
   id: id(),
   name: text("name").notNull(),
   address: text("address").notNull(),
+  city: text("city"),
   lat: doublePrecision("lat").notNull(),
   lng: doublePrecision("lng").notNull(),
 });

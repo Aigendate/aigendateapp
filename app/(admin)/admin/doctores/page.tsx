@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { asc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../../../../server/client";
 import { doctors, hospitals } from "../../../../server/schema";
@@ -31,12 +32,21 @@ export default async function AdminDoctoresPage({
       .from(doctors)
       .innerJoin(hospitals, eq(doctors.hospital_id, hospitals.id))
       .where(q ? or(ilike(doctors.name, `%${q}%`), ilike(doctors.specialty, `%${q}%`)) : undefined)
-      .orderBy(asc(doctors.name)),
+      .orderBy(asc(hospitals.name), asc(doctors.specialty), asc(doctors.name)),
     db
       .select({ id: hospitals.id, name: hospitals.name })
       .from(hospitals)
       .orderBy(asc(hospitals.name)),
   ]);
+
+  // Bucket doctors under their hospital for grouped section rendering.
+  const byHospital = new Map<string, { name: string; doctors: typeof doctorRows }>();
+  for (const d of doctorRows) {
+    const entry = byHospital.get(d.hospital_id) ?? { name: d.hospital_name, doctors: [] };
+    entry.doctors.push(d);
+    byHospital.set(d.hospital_id, entry);
+  }
+  const grouped = [...byHospital.entries()];
 
   return (
     <>
@@ -64,8 +74,22 @@ export default async function AdminDoctoresPage({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {doctorRows.map((d) => (
-            <DoctorActions key={d.id} doctor={d} hospitals={hospitalRows} />
+          {grouped.map(([hospitalId, entry]) => (
+            <Fragment key={hospitalId}>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableCell colSpan={4} className="py-1.5">
+                  <span className="text-[0.7rem] font-medium uppercase tracking-wider">
+                    {entry.name}
+                  </span>
+                  <span className="ml-2 text-[0.6rem] text-muted-foreground">
+                    {entry.doctors.length}
+                  </span>
+                </TableCell>
+              </TableRow>
+              {entry.doctors.map((d) => (
+                <DoctorActions key={d.id} doctor={d} hospitals={hospitalRows} />
+              ))}
+            </Fragment>
           ))}
           {doctorRows.length === 0 && (
             <TableRow>
