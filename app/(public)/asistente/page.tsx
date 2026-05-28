@@ -7,7 +7,7 @@ export const metadata = {
 
 export default function AsistentePage() {
   return (
-    <div className="animate-slide-up">
+    <div className="animate-slide-up mx-auto max-w-[960px]">
       <VoiceAgent />
     </div>
   );
