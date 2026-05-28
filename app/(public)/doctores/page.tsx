@@ -1,4 +1,4 @@
-import { getDb, listDoctors } from "../../../server/db.server";
+import { listDoctors } from "../../../server/db.server";
 import { Card, CardHeader, CardTitle, CardContent } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { SearchInput } from "~/components/search-input";
@@ -17,8 +17,7 @@ export default async function DoctoresPage({
   searchParams: Promise<{ q?: string; specialty?: string }>;
 }) {
   const { q, specialty } = await searchParams;
-  const db = getDb();
-  const doctors = listDoctors(db, { specialty, name: q });
+  const doctors = await listDoctors({ specialty, name: q });
 
   return (
     <Card>
