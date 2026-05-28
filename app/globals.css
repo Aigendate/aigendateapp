@@ -58,6 +58,42 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Card materialize: rise + settle from a slight scale-down */
+@keyframes card-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Hero elements reveal upward on page load */
+@keyframes reveal-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Idle orb: a slow, organic breath */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.12); opacity: 0.8; }
+}
+
+/* Speaking orb: a faster, brighter pulse */
+@keyframes glow-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.65; }
+  50% { transform: scale(1.18); opacity: 1; }
+}
+
+/* Expanding halo ring that fades as it grows */
+@keyframes ripple {
+  from { transform: scale(0.7); opacity: 0.55; }
+  to { transform: scale(2.1); opacity: 0; }
+}
+
+/* Connecting: a soft shimmer sweep */
+@keyframes shimmer {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
 /* Schedule-X theme overrides */
 :root {
   --sx-color-primary: #1A6B5A;
@@ -97,4 +133,58 @@
 
 .animate-slide-up {
   animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.animate-card-rise {
+  animation: card-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.animate-reveal {
+  animation: reveal-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.animate-breathe {
+  animation: breathe 4.5s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow-pulse 1.1s ease-in-out infinite;
+}
+
+.animate-ripple {
+  animation: ripple 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Orb core fills — radial gradients pulled from the theme tokens */
+.orb-core-idle {
+  background: radial-gradient(circle at 35% 28%, var(--color-muted), var(--color-muted-foreground) 82%);
+}
+.orb-core-active {
+  background: radial-gradient(circle at 35% 28%, var(--color-primary-light), var(--color-primary) 78%);
+}
+.orb-core-speaking {
+  background: radial-gradient(circle at 35% 28%, var(--color-accent-light), var(--color-accent) 74%);
+}
+
+/* Radial glow that grounds the orb on the stage, built from the brand hues */
+.stage-glow {
+  background:
+    radial-gradient(60% 60% at 50% 42%, rgba(26, 107, 90, 0.16), transparent 70%),
+    radial-gradient(40% 40% at 50% 38%, rgba(196, 81, 10, 0.1), transparent 75%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-up,
+  .animate-card-rise,
+  .animate-reveal,
+  .animate-breathe,
+  .animate-glow,
+  .animate-ripple,
+  .animate-shimmer {
+    animation: none;
+  }
 }
