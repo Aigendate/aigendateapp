@@ -212,6 +212,10 @@ const assistant = {
   // Safety net: hang up after prolonged silence even if the model doesn't call
   // finalizar_llamada.
   silenceTimeoutSeconds: 30,
+  // Messages forwarded to the browser (Vapi Web SDK `message` events). The
+  // /asistente page needs `tool-calls` to render live cards and `transcript`
+  // for the live conversation feed.
+  clientMessages: ["transcript", "tool-calls", "conversation-update", "speech-update"],
 };
 
 const url = EXISTING_ID
