@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { db } from "../../../server/client";
 import {
   hospitals,
@@ -42,8 +42,6 @@ export async function updatePatient(formData: FormData) {
 
 export async function deletePatient(formData: FormData) {
   const id = formData.get("id") as string;
-  await db.delete(waitlist_entries).where(eq(waitlist_entries.patient_id, id));
-  await db.delete(appointments).where(eq(appointments.patient_id, id));
   await db.delete(patients).where(eq(patients.id, id));
   revalidateAdmin();
 }
@@ -76,17 +74,6 @@ export async function updateHospital(formData: FormData) {
 
 export async function deleteHospital(formData: FormData) {
   const id = formData.get("id") as string;
-  const hospitalDoctors = await db
-    .select({ id: doctors.id })
-    .from(doctors)
-    .where(eq(doctors.hospital_id, id));
-  const doctorIds = hospitalDoctors.map((d) => d.id);
-  if (doctorIds.length > 0) {
-    await db.delete(waitlist_entries).where(inArray(waitlist_entries.doctor_id, doctorIds));
-    await db.delete(doctor_schedules).where(inArray(doctor_schedules.doctor_id, doctorIds));
-  }
-  await db.delete(appointments).where(eq(appointments.hospital_id, id));
-  await db.delete(doctors).where(eq(doctors.hospital_id, id));
   await db.delete(hospitals).where(eq(hospitals.id, id));
   revalidateAdmin();
 }
@@ -117,9 +104,6 @@ export async function updateDoctor(formData: FormData) {
 
 export async function deleteDoctor(formData: FormData) {
   const id = formData.get("id") as string;
-  await db.delete(waitlist_entries).where(eq(waitlist_entries.doctor_id, id));
-  await db.delete(doctor_schedules).where(eq(doctor_schedules.doctor_id, id));
-  await db.delete(appointments).where(eq(appointments.doctor_id, id));
   await db.delete(doctors).where(eq(doctors.id, id));
   revalidateAdmin();
 }

@@ -1,12 +1,10 @@
-import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "./client";
 import {
   hospitals,
   doctors,
   patients,
   appointments,
-  doctor_schedules,
-  waitlist_entries,
 } from "./schema";
 
 export interface Hospital {
@@ -46,6 +44,11 @@ export interface Appointment {
   time: string;
   status: string;
   created_at: string;
+}
+
+function isUniqueViolation(err: unknown, constraint: string): boolean {
+  const cause = (err as { cause?: { code?: string; constraint?: string } })?.cause;
+  return cause?.code === "23505" && cause.constraint === constraint;
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -179,22 +182,15 @@ export async function createAppointment(
   if (doctor.hospital_id !== params.hospital_id)
     return { ok: false, error: `Dr. ${doctor.name} does not practice at this hospital.` };
 
-  const [conflict] = await db
-    .select({ id: appointments.id })
-    .from(appointments)
-    .where(
-      and(
-        eq(appointments.doctor_id, params.doctor_id),
-        eq(appointments.date, params.date),
-        eq(appointments.time, params.time),
-        eq(appointments.status, "scheduled"),
-      ),
-    )
-    .limit(1);
-  if (conflict)
-    return { ok: false, error: `Dr. ${doctor.name} already has an appointment at ${params.date} ${params.time}.` };
-
-  const [row] = await db.insert(appointments).values(params).returning();
+  let row;
+  try {
+    [row] = await db.insert(appointments).values(params).returning();
+  } catch (err) {
+    if (isUniqueViolation(err, "appointments_scheduled_slot_key")) {
+      return { ok: false, error: `Dr. ${doctor.name} already has an appointment at ${params.date} ${params.time}.` };
+    }
+    throw err;
+  }
   return {
     ok: true,
     appointment: {
@@ -259,8 +255,6 @@ export async function updatePatient(
 }
 
 export async function deletePatient(id: string): Promise<void> {
-  await db.delete(waitlist_entries).where(eq(waitlist_entries.patient_id, id));
-  await db.delete(appointments).where(eq(appointments.patient_id, id));
   await db.delete(patients).where(eq(patients.id, id));
 }
 
@@ -278,17 +272,6 @@ export async function updateHospital(
 }
 
 export async function deleteHospital(id: string): Promise<void> {
-  const hospitalDoctors = await db
-    .select({ id: doctors.id })
-    .from(doctors)
-    .where(eq(doctors.hospital_id, id));
-  const doctorIds = hospitalDoctors.map((d) => d.id);
-  if (doctorIds.length > 0) {
-    await db.delete(waitlist_entries).where(inArray(waitlist_entries.doctor_id, doctorIds));
-    await db.delete(doctor_schedules).where(inArray(doctor_schedules.doctor_id, doctorIds));
-  }
-  await db.delete(appointments).where(eq(appointments.hospital_id, id));
-  await db.delete(doctors).where(eq(doctors.hospital_id, id));
   await db.delete(hospitals).where(eq(hospitals.id, id));
 }
 
@@ -305,9 +288,6 @@ export async function updateDoctor(
 }
 
 export async function deleteDoctor(id: string): Promise<void> {
-  await db.delete(waitlist_entries).where(eq(waitlist_entries.doctor_id, id));
-  await db.delete(doctor_schedules).where(eq(doctor_schedules.doctor_id, id));
-  await db.delete(appointments).where(eq(appointments.doctor_id, id));
   await db.delete(doctors).where(eq(doctors.id, id));
 }
 
