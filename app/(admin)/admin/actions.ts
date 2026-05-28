@@ -19,10 +19,12 @@ import {
   isUniqueViolation,
   SCHEDULED_SLOT_INDEX,
 } from "../../../server/db";
+import { requireAdmin } from "./auth";
 
 // The slot-computation logic moved into server/db.ts; this thin wrapper keeps
 // the existing admin server action so admin components don't need to change.
 export async function getAvailableSlots(doctorId: string, date: string): Promise<string[]> {
+  await requireAdmin();
   return getAvailableSlotsHelper(doctorId, date);
 }
 
@@ -33,6 +35,7 @@ function revalidateAdmin() {
 // --- Pacientes ---
 
 export async function createPatient(formData: FormData) {
+  await requireAdmin();
   await db.insert(patients).values({
     name: formData.get("name") as string,
     email: (formData.get("email") as string) || null,
@@ -42,6 +45,7 @@ export async function createPatient(formData: FormData) {
 }
 
 export async function updatePatient(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   await db
     .update(patients)
@@ -55,6 +59,7 @@ export async function updatePatient(formData: FormData) {
 }
 
 export async function deletePatient(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   await db.delete(patients).where(eq(patients.id, id));
   revalidateAdmin();
@@ -63,6 +68,7 @@ export async function deletePatient(formData: FormData) {
 // --- Hospitales ---
 
 export async function createHospital(formData: FormData) {
+  await requireAdmin();
   await db.insert(hospitals).values({
     name: formData.get("name") as string,
     address: formData.get("address") as string,
@@ -74,6 +80,7 @@ export async function createHospital(formData: FormData) {
 }
 
 export async function updateHospital(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   await db
     .update(hospitals)
@@ -89,6 +96,7 @@ export async function updateHospital(formData: FormData) {
 }
 
 export async function deleteHospital(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   await db.delete(hospitals).where(eq(hospitals.id, id));
   revalidateAdmin();
@@ -97,6 +105,7 @@ export async function deleteHospital(formData: FormData) {
 // --- Doctores ---
 
 export async function createDoctor(formData: FormData) {
+  await requireAdmin();
   await db.insert(doctors).values({
     name: formData.get("name") as string,
     specialty: formData.get("specialty") as string,
@@ -106,6 +115,7 @@ export async function createDoctor(formData: FormData) {
 }
 
 export async function updateDoctor(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   await db
     .update(doctors)
@@ -119,6 +129,7 @@ export async function updateDoctor(formData: FormData) {
 }
 
 export async function deleteDoctor(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   await db.delete(doctors).where(eq(doctors.id, id));
   revalidateAdmin();
@@ -127,6 +138,7 @@ export async function deleteDoctor(formData: FormData) {
 // --- Turnos ---
 
 export async function createAppointment(formData: FormData) {
+  await requireAdmin();
   const result = await createAppointmentValidated({
     hospital_id: formData.get("hospital_id") as string,
     patient_id: formData.get("patient_id") as string,
@@ -139,18 +151,21 @@ export async function createAppointment(formData: FormData) {
 }
 
 export async function cancelAppointment(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   await db.update(appointments).set({ status: "cancelled" }).where(eq(appointments.id, id));
   revalidateAdmin();
 }
 
 export async function deleteAppointment(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   await db.delete(appointments).where(eq(appointments.id, id));
   revalidateAdmin();
 }
 
 export async function rescheduleAppointment(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   const date = formData.get("date") as string;
   const time = formData.get("time") as string;
@@ -164,6 +179,7 @@ export async function cancelAndOfferWaitlist(formData: FormData): Promise<{
   message: string;
   candidates: { id: string; patient_name: string; patient_phone: string | null }[];
 }> {
+  await requireAdmin();
   const id = formData.get("id") as string;
 
   const [appointment] = await db
@@ -214,6 +230,7 @@ export async function cancelAndOfferWaitlist(formData: FormData): Promise<{
 }
 
 export async function offerSlotToWaitlistEntry(formData: FormData) {
+  await requireAdmin();
   const waitlistId = formData.get("waitlist_id") as string;
   const appointmentDate = formData.get("date") as string;
   const appointmentTime = formData.get("time") as string;
@@ -252,6 +269,7 @@ export async function offerSlotToWaitlistEntry(formData: FormData) {
 // --- Lista de Espera ---
 
 export async function createWaitlistEntry(formData: FormData) {
+  await requireAdmin();
   await addToWaitlist({
     patient_id: formData.get("patient_id") as string,
     doctor_id: (formData.get("doctor_id") as string) || undefined,
@@ -265,6 +283,7 @@ export async function createWaitlistEntry(formData: FormData) {
 }
 
 export async function deleteWaitlistEntry(formData: FormData) {
+  await requireAdmin();
   const id = formData.get("id") as string;
   await db.delete(waitlist_entries).where(eq(waitlist_entries.id, id));
   revalidateAdmin();
@@ -273,6 +292,7 @@ export async function deleteWaitlistEntry(formData: FormData) {
 // --- Horarios de Doctor ---
 
 export async function saveDoctorSchedule(formData: FormData) {
+  await requireAdmin();
   const doctorId = formData.get("doctor_id") as string;
   const dayOfWeek = parseInt(formData.get("day_of_week") as string);
   const startTime = formData.get("start_time") as string;
@@ -298,6 +318,7 @@ export async function saveDoctorSchedule(formData: FormData) {
 // --- Turnos Recurrentes ---
 
 export async function createRecurringAppointment(formData: FormData) {
+  await requireAdmin();
   const hospitalId = formData.get("hospital_id") as string;
   const patientId = formData.get("patient_id") as string;
   const doctorId = formData.get("doctor_id") as string;
@@ -444,6 +465,7 @@ const PATIENT_NAMES = [
 const TIMES = ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "14:00", "14:30", "15:00", "15:30", "16:00"];
 
 export async function scrapeAndSeed(): Promise<{ ok: boolean; message: string }> {
+  await requireAdmin();
   try {
     await runPythonScraper();
 
@@ -540,6 +562,7 @@ export async function scrapeAndSeed(): Promise<{ ok: boolean; message: string }>
 }
 
 export async function deleteAllData(): Promise<{ ok: boolean; message: string }> {
+  await requireAdmin();
   try {
     const apptResult = await db.delete(appointments);
     const docResult = await db.delete(doctors);
