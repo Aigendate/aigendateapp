@@ -8,6 +8,7 @@
     "vercel-build": "node --import tsx vercel-build.ts",
     "start": "next start -p 3456",
     "mcp:stdio": "node --import tsx mcp-stdio.ts",
+    "vapi:setup": "node --env-file=.env --import tsx vapi-setup.ts",
     "seed": "node --env-file=.env --import tsx seed.ts",
     "populate:hospitals": "node --env-file=.env --import tsx populate-hospitals.ts",
     "db:up": "docker compose up -d postgres",
