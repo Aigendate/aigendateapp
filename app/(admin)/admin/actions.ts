@@ -11,6 +11,11 @@ import {
   doctor_schedules,
   waitlist_entries,
 } from "../../../server/schema";
+import {
+  createAppointment as createAppointmentValidated,
+  isUniqueViolation,
+  SCHEDULED_SLOT_INDEX,
+} from "../../../server/db";
 
 function revalidateAdmin() {
   revalidatePath("/admin", "layout");
@@ -111,13 +116,14 @@ export async function deleteDoctor(formData: FormData) {
 // --- Turnos ---
 
 export async function createAppointment(formData: FormData) {
-  await db.insert(appointments).values({
+  const result = await createAppointmentValidated({
     hospital_id: formData.get("hospital_id") as string,
     patient_id: formData.get("patient_id") as string,
     doctor_id: formData.get("doctor_id") as string,
     date: formData.get("date") as string,
     time: formData.get("time") as string,
   });
+  if (!result.ok) throw new Error(result.error);
   revalidateAdmin();
 }
 
@@ -137,7 +143,14 @@ export async function rescheduleAppointment(formData: FormData) {
   const id = formData.get("id") as string;
   const date = formData.get("date") as string;
   const time = formData.get("time") as string;
-  await db.update(appointments).set({ date, time }).where(eq(appointments.id, id));
+  try {
+    await db.update(appointments).set({ date, time }).where(eq(appointments.id, id));
+  } catch (err) {
+    if (isUniqueViolation(err, SCHEDULED_SLOT_INDEX)) {
+      throw new Error(`That doctor already has an appointment at ${date} ${time}.`);
+    }
+    throw err;
+  }
   revalidateAdmin();
 }
 
@@ -208,13 +221,25 @@ export async function offerSlotToWaitlistEntry(formData: FormData) {
     .where(eq(waitlist_entries.id, waitlistId))
     .returning();
 
-  await db.insert(appointments).values({
-    patient_id: entry.patient_id,
-    doctor_id: doctorId,
-    hospital_id: hospitalId,
-    date: appointmentDate,
-    time: appointmentTime,
-  });
+  try {
+    await db.insert(appointments).values({
+      patient_id: entry.patient_id,
+      doctor_id: doctorId,
+      hospital_id: hospitalId,
+      date: appointmentDate,
+      time: appointmentTime,
+    });
+  } catch (err) {
+    if (isUniqueViolation(err, SCHEDULED_SLOT_INDEX)) {
+      // Roll back the waitlist offer if the slot got taken between cancel and offer.
+      await db
+        .update(waitlist_entries)
+        .set({ status: "waiting" })
+        .where(eq(waitlist_entries.id, waitlistId));
+      throw new Error(`Slot ${appointmentDate} ${appointmentTime} is no longer available.`);
+    }
+    throw err;
+  }
 
   revalidateAdmin();
 }
@@ -319,36 +344,45 @@ export async function createRecurringAppointment(formData: FormData) {
   const weeksInterval = parseInt(formData.get("weeks_interval") as string) || 1;
   const occurrences = parseInt(formData.get("occurrences") as string) || 4;
 
-  const [parent] = await db
-    .insert(appointments)
-    .values({
-      hospital_id: hospitalId,
-      patient_id: patientId,
-      doctor_id: doctorId,
-      date: startDate,
-      time,
-      is_recurring: true,
-      recurrence_rule: `weekly:${weeksInterval}`,
-    })
-    .returning();
+  try {
+    await db.transaction(async (tx) => {
+      const [parent] = await tx
+        .insert(appointments)
+        .values({
+          hospital_id: hospitalId,
+          patient_id: patientId,
+          doctor_id: doctorId,
+          date: startDate,
+          time,
+          is_recurring: true,
+          recurrence_rule: `weekly:${weeksInterval}`,
+        })
+        .returning();
 
-  const childData = [];
-  for (let i = 1; i < occurrences; i++) {
-    const d = new Date(startDate + "T12:00:00");
-    d.setDate(d.getDate() + 7 * weeksInterval * i);
-    childData.push({
-      hospital_id: hospitalId,
-      patient_id: patientId,
-      doctor_id: doctorId,
-      date: d.toISOString().split("T")[0],
-      time,
-      is_recurring: true,
-      recurrence_rule: `weekly:${weeksInterval}`,
-      parent_appointment_id: parent.id,
+      const childData = [];
+      for (let i = 1; i < occurrences; i++) {
+        const d = new Date(startDate + "T12:00:00");
+        d.setDate(d.getDate() + 7 * weeksInterval * i);
+        childData.push({
+          hospital_id: hospitalId,
+          patient_id: patientId,
+          doctor_id: doctorId,
+          date: d.toISOString().split("T")[0],
+          time,
+          is_recurring: true,
+          recurrence_rule: `weekly:${weeksInterval}`,
+          parent_appointment_id: parent.id,
+        });
+      }
+      if (childData.length > 0) {
+        await tx.insert(appointments).values(childData);
+      }
     });
-  }
-  if (childData.length > 0) {
-    await db.insert(appointments).values(childData);
+  } catch (err) {
+    if (isUniqueViolation(err, SCHEDULED_SLOT_INDEX)) {
+      throw new Error("One of the recurring slots is already booked at that time.");
+    }
+    throw err;
   }
 
   revalidateAdmin();

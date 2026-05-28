@@ -15,6 +15,7 @@
     "db:migrate": "node --env-file=.env --import tsx server/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "db:test:setup": "node --env-file=.env --import tsx server/setup-test-db.ts",
     "scrape": "python3 scraper/paraguay_hospitals.py",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -46,10 +46,12 @@ export interface Appointment {
   created_at: string;
 }
 
-function isUniqueViolation(err: unknown, constraint: string): boolean {
+export function isUniqueViolation(err: unknown, constraint: string): boolean {
   const cause = (err as { cause?: { code?: string; constraint?: string } })?.cause;
   return cause?.code === "23505" && cause.constraint === constraint;
 }
+
+export const SCHEDULED_SLOT_INDEX = "appointments_scheduled_slot_key";
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -186,7 +188,7 @@ export async function createAppointment(
   try {
     [row] = await db.insert(appointments).values(params).returning();
   } catch (err) {
-    if (isUniqueViolation(err, "appointments_scheduled_slot_key")) {
+    if (isUniqueViolation(err, SCHEDULED_SLOT_INDEX)) {
       return { ok: false, error: `Dr. ${doctor.name} already has an appointment at ${params.date} ${params.time}.` };
     }
     throw err;

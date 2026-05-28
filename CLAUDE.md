@@ -20,7 +20,10 @@ npm run db:generate   # Generate a new Drizzle migration from schema changes
 npm run db:migrate    # Apply pending migrations against $DATABASE_URL
 npm run db:push       # Sync schema directly (skips migration files)
 npm run db:studio     # Open Drizzle Studio
+npm run db:test:setup # Create + migrate a separate test DB (turnos_test)
 ```
+
+After running `db:test:setup` once, add the printed `DATABASE_URL_TEST` line to your `.env` so `npm test` uses the isolated DB instead of truncating the dev seed.
 
 ## Architecture
 

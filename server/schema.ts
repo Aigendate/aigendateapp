@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   pgTable,
   text,
   integer,
@@ -85,7 +86,10 @@ export const appointments = pgTable(
     status: text("status").notNull().default("scheduled"),
     is_recurring: boolean("is_recurring").notNull().default(false),
     recurrence_rule: text("recurrence_rule"),
-    parent_appointment_id: text("parent_appointment_id"),
+    parent_appointment_id: text("parent_appointment_id").references(
+      (): AnyPgColumn => appointments.id,
+      { onDelete: "set null" },
+    ),
     created_at: timestamp("created_at", { precision: 3, mode: "date" })
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
