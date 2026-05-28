@@ -139,6 +139,16 @@ const tools = [
     ["patient_id", "especialidad", "fecha_desde", "fecha_hasta"],
     "Listo, te anoto en la lista…",
   ),
+  // Built-in Vapi tool (no server) so the assistant can hang up when the
+  // conversation is finished or the caller says goodbye.
+  {
+    type: "endCall" as const,
+    function: {
+      name: "finalizar_llamada",
+      description:
+        "Termina la llamada. Usala cuando el trámite quedó resuelto y la persona no necesita nada más, o cuando se despide.",
+    },
+  },
 ];
 
 const SYSTEM_PROMPT = `Sos Sofía, recepcionista de "Turnos PY", que agenda turnos médicos por teléfono en Paraguay. Hablás como una persona real, cálida y relajada — no como un sistema automático.
@@ -175,6 +185,8 @@ REPROGRAMAR: Si quiere mover un turno, usá reagendar_turno. Si acabás de agend
 
 CANCELAR: necesitás el identificador del turno; si no lo tienen, explicá con amabilidad que por ahora hace falta ese dato.
 
+CIERRE: Cuando el trámite quede resuelto, preguntá si necesita algo más. Si no, despedite en una frase corta ("¡Listo! Que tengas buen día.") y terminá la llamada con finalizar_llamada. Si la persona se despide ("gracias, chau", "nada más"), despedite y colgá igual. No te quedes en silencio esperando.
+
 REGLAS: No inventes hospitales, doctores ni horarios — usá siempre las herramientas.`;
 
 const assistant = {
@@ -191,6 +203,9 @@ const assistant = {
   },
   voice: { provider: "vapi", voiceId: "Gustavo" },
   transcriber: { provider: "deepgram", model: "nova-3", language: "es" },
+  // Safety net: hang up after prolonged silence even if the model doesn't call
+  // finalizar_llamada.
+  silenceTimeoutSeconds: 30,
 };
 
 const url = EXISTING_ID
