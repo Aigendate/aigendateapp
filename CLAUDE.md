@@ -47,6 +47,10 @@ Admin pages and server actions in `app/(admin)/admin/` query Drizzle directly vi
 
 Generated SQL lives in `drizzle/`. After editing `server/schema.ts`, run `npm run db:generate` to emit a new file, then `npm run db:migrate` to apply it. `drizzle.config.ts` is the source of truth for the kit. The `__drizzle_migrations` table (in the `drizzle` schema) tracks applied migrations.
 
+### Deployment (Vercel)
+
+`vercel-build.ts` is the build entry — Vercel runs `npm run vercel-build` whenever that script exists. It applies pending migrations against `DATABASE_URL` only when `VERCEL_ENV=production`, then invokes `next build`. Preview/dev builds skip migrations so PR previews don't mutate the prod DB. Set `DATABASE_URL` (and `DATABASE_URL_TEST` if running tests in CI) in Vercel project env. The build fails loudly if `DATABASE_URL` is missing on a production deploy.
+
 ### MCP
 
 `server/mcp.ts` exports `createMcpServer(dbPath?)` which registers 7 tools. Two entry points:
