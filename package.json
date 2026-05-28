@@ -9,6 +9,7 @@
     "start": "next start -p 3456",
     "mcp:stdio": "node --import tsx mcp-stdio.ts",
     "vapi:setup": "node --env-file=.env --import tsx vapi-setup.ts",
+    "elevenlabs:setup": "node --env-file=.env --import tsx elevenlabs-setup.ts",
     "seed": "node --env-file=.env --import tsx seed.ts",
     "populate:hospitals": "node --env-file=.env --import tsx populate-hospitals.ts",
     "db:backfill-schedules": "node --env-file=.env --import tsx backfill-schedules.ts",
@@ -26,6 +27,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.4.2",
+    "@elevenlabs/react": "^1.6.4",
     "@headlessui/react": "^2.2.10",
     "@heroicons/react": "^2.2.0",
     "@modelcontextprotocol/sdk": "^1.12.0",

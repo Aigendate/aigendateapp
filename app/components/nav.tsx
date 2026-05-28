@@ -10,6 +10,7 @@ const navItems = [
   { href: "/especialidades", label: "Especialidades" },
   { href: "/doctores", label: "Doctores" },
   { href: "/asistente", label: "Asistente" },
+  { href: "/asistente-eleven", label: "Asistente · EL" },
 ];
 
 export function Nav() {
