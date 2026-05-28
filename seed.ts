@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./server/client";
 import { doctors, hospitals } from "./server/schema";
 import { insertHospital, insertDoctor, registerPatient, createAppointment } from "./server/db";
+import { seedDoctorSchedules } from "./server/schedules-seed";
 
 const FALLBACK_HOSPITALS = [
   { name: "Hospital Nacional de Itauguá", address: "Ruta 2, Itauguá, Paraguay", lat: -25.39, lng: -57.35 },
@@ -103,6 +104,9 @@ async function main() {
     }
     console.log(`Seeded ${doctorIds.length} doctors`);
   }
+
+  const scheduleRows = await seedDoctorSchedules(doctorIds);
+  console.log(`Seeded ${scheduleRows} doctor schedule rows (Mon–Fri).`);
 
   const patientsToSeed = [
     { name: "Juan Pérez", email: "juan.perez@email.com", phone: "+595 21 555-0001" },

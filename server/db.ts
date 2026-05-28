@@ -5,6 +5,8 @@ import {
   doctors,
   patients,
   appointments,
+  doctor_schedules,
+  waitlist_entries,
 } from "./schema";
 
 export interface Hospital {
@@ -336,6 +338,100 @@ export async function cancelAppointment(
     ok: true,
     appointment: { ...row, status: "cancelled", created_at: row.created_at.toISOString() },
   };
+}
+
+// Free time slots for a doctor on a date: the doctor's working hours for that
+// weekday (doctor_schedules) minus already-booked scheduled appointments.
+// day_of_week follows JS getDay(): 0=Sunday … 6=Saturday.
+export async function getAvailableSlots(doctorId: string, date: string): Promise<string[]> {
+  const dayOfWeek = new Date(date + "T12:00:00").getDay();
+
+  const [schedule] = await db
+    .select()
+    .from(doctor_schedules)
+    .where(
+      and(eq(doctor_schedules.doctor_id, doctorId), eq(doctor_schedules.day_of_week, dayOfWeek)),
+    )
+    .limit(1);
+  if (!schedule) return [];
+
+  const existing = await db
+    .select({ time: appointments.time })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.doctor_id, doctorId),
+        eq(appointments.date, date),
+        eq(appointments.status, "scheduled"),
+      ),
+    );
+  const bookedTimes = new Set(existing.map((a) => a.time));
+
+  const slots: string[] = [];
+  const [startH, startM] = schedule.start_time.split(":").map(Number);
+  const [endH, endM] = schedule.end_time.split(":").map(Number);
+  let current = startH * 60 + startM;
+  const end = endH * 60 + endM;
+
+  while (current + schedule.slot_duration <= end) {
+    const h = String(Math.floor(current / 60)).padStart(2, "0");
+    const m = String(current % 60).padStart(2, "0");
+    const timeStr = `${h}:${m}`;
+    if (!bookedTimes.has(timeStr)) slots.push(timeStr);
+    current += schedule.slot_duration;
+  }
+
+  return slots;
+}
+
+// Move an existing appointment to a new date/time. Surfaces the slot-collision
+// (23505 on the scheduled-slot partial unique index) as a friendly error.
+export async function rescheduleAppointment(
+  id: string,
+  date: string,
+  time: string,
+): Promise<{ ok: true; appointment: Appointment } | { ok: false; error: string }> {
+  let row;
+  try {
+    [row] = await db
+      .update(appointments)
+      .set({ date, time })
+      .where(eq(appointments.id, id))
+      .returning();
+  } catch (err) {
+    if (isUniqueViolation(err, SCHEDULED_SLOT_INDEX)) {
+      return { ok: false, error: `Ese horario (${date} ${time}) ya está ocupado.` };
+    }
+    throw err;
+  }
+  if (!row) return { ok: false, error: "Appointment not found." };
+  return { ok: true, appointment: { ...row, created_at: row.created_at.toISOString() } };
+}
+
+// Add a patient to the waitlist for a specialty (optionally a specific doctor)
+// within a date range.
+export async function addToWaitlist(params: {
+  patient_id: string;
+  doctor_id?: string;
+  specialty: string;
+  date_from: string;
+  date_to: string;
+  time_pref?: string;
+  priority?: number;
+}): Promise<{ id: string }> {
+  const [row] = await db
+    .insert(waitlist_entries)
+    .values({
+      patient_id: params.patient_id,
+      doctor_id: params.doctor_id ?? null,
+      specialty: params.specialty,
+      date_from: params.date_from,
+      date_to: params.date_to,
+      time_pref: params.time_pref ?? null,
+      priority: params.priority ?? 0,
+    })
+    .returning({ id: waitlist_entries.id });
+  return { id: row.id };
 }
 
 export { sql };

@@ -11,6 +11,7 @@
     "vapi:setup": "node --env-file=.env --import tsx vapi-setup.ts",
     "seed": "node --env-file=.env --import tsx seed.ts",
     "populate:hospitals": "node --env-file=.env --import tsx populate-hospitals.ts",
+    "db:backfill-schedules": "node --env-file=.env --import tsx backfill-schedules.ts",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",

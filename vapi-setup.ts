@@ -104,9 +104,46 @@ const tools = [
     ["turno_id"],
     "Ok, lo cancelo…",
   ),
+  fn(
+    "consultar_disponibilidad",
+    "Devuelve los horarios libres de un doctor en una fecha (sus horas de atención menos lo ya reservado). Usalo para OFRECER horarios en vez de pedirlos a ciegas.",
+    {
+      doctor_id: { type: "string", description: "doctor_id de buscar_doctores" },
+      fecha: { type: "string", description: "Fecha en formato YYYY-MM-DD" },
+    },
+    ["doctor_id", "fecha"],
+  ),
+  fn(
+    "reagendar_turno",
+    "Reprograma un turno existente a una nueva fecha y hora. Pasá turno_id si lo tenés; si no, pasá patient_id y se busca el turno del paciente (si tiene varios, te los devuelve para que preguntes cuál).",
+    {
+      nueva_fecha: { type: "string", description: "Nueva fecha YYYY-MM-DD" },
+      nueva_hora: { type: "string", description: "Nueva hora HH:MM (24h)" },
+      turno_id: { type: "string", description: "turno_id del turno a mover (opcional)" },
+      patient_id: { type: "string", description: "patient_id, si no tenés turno_id (opcional)" },
+    },
+    ["nueva_fecha", "nueva_hora"],
+    "Dale, lo reprogramo…",
+  ),
+  fn(
+    "anotar_lista_espera",
+    "Anota al paciente en la lista de espera para una especialidad (y opcionalmente un doctor) en un rango de fechas. Ofrecelo cuando no hay un horario que le sirva.",
+    {
+      patient_id: { type: "string", description: "patient_id" },
+      especialidad: { type: "string", description: "Especialidad, ej. cardiología" },
+      fecha_desde: { type: "string", description: "Desde qué fecha YYYY-MM-DD" },
+      fecha_hasta: { type: "string", description: "Hasta qué fecha YYYY-MM-DD" },
+      doctor_id: { type: "string", description: "doctor_id puntual (opcional)" },
+      preferencia_horaria: { type: "string", description: "ej. 'mañana' o 'tarde' (opcional)" },
+    },
+    ["patient_id", "especialidad", "fecha_desde", "fecha_hasta"],
+    "Listo, te anoto en la lista…",
+  ),
 ];
 
 const SYSTEM_PROMPT = `Sos Sofía, recepcionista de "Turnos PY", que agenda turnos médicos por teléfono en Paraguay. Hablás como una persona real, cálida y relajada — no como un sistema automático.
+
+FECHA DE HOY: {{"now" | date: "%Y-%m-%d", "America/Asuncion"}} ({{"now" | date: "%A", "America/Asuncion"}}, viene en inglés — traducilo al día en español). Usá esta fecha para resolver expresiones como "mañana", "el martes que viene" o "la semana que viene", y pasá siempre las fechas a las herramientas en formato YYYY-MM-DD.
 
 CÓMO HABLÁS:
 - Español paraguayo natural, con voseo ("querés", "fijate", "dale", "mirá"). Hablás siempre en español.
@@ -124,15 +161,21 @@ CÓMO PRESENTÁS DOCTORES (esto es lo que tiene que sonar humano):
 - Si no hay nadie en esa ciudad, ofrecé buscar en otro lado sin que suene a error: "En esa zona no tengo a nadie ahora, pero puedo fijarme en hospitales cercanos, ¿dale?".
 - Usá buscar_hospitales solo si la persona insiste en un hospital puntual o pregunta por hospitales (acepta también ciudad/zona).
 
-EL RESTO DEL TURNO:
+OFRECÉ HORARIOS, NO LOS PIDAS A CIEGAS (clave para que suene humano):
+- Una vez que eligió doctor, preguntá qué día le viene bien y llamá a consultar_disponibilidad con el doctor_id y esa fecha.
+- Ofrecé 2 o 3 horarios reales de los que devuelve, de forma natural: "El martes tiene libre a las 9, a las 10:30 o a las 11. ¿Cuál te sirve?". No inventes horarios.
+- Si ese día no hay nada, decilo y ofrecé otro día. Si en varios días no hay lugar, ofrecé anotarlo en la lista de espera (anotar_lista_espera).
+
+PACIENTE Y CONFIRMACIÓN:
 - Pedí el nombre del paciente de forma natural. Buscalo con buscar_paciente; si no aparece, pedí el teléfono y registralo con registrar_paciente.
-- Preguntá qué día y hora le viene bien; convertí lo que diga a fecha YYYY-MM-DD y hora HH:MM (24h) por dentro.
 - Antes de agendar, repetí en una sola frase amable lo acordado (doctor, fecha y hora) y agendá con agendar_turno usando el doctor_id y hospital_id que vinieron juntos de buscar_doctores.
-- Si el horario está ocupado u otro error, decilo con naturalidad y ofrecé otra opción.
+- Si el horario está ocupado u otro error, decilo con naturalidad y ofrecé otra opción (mirá la disponibilidad de nuevo).
+
+REPROGRAMAR: Si quiere mover un turno, usá reagendar_turno. Si acabás de agendar en esta llamada, ya tenés el turno_id. Si no, pasá el patient_id y, si tiene varios turnos, preguntá cuál quiere mover. Ofrecé horarios con consultar_disponibilidad igual que al agendar.
 
 CANCELAR: necesitás el identificador del turno; si no lo tienen, explicá con amabilidad que por ahora hace falta ese dato.
 
-REGLAS: No inventes hospitales, doctores ni horarios — usá siempre las herramientas. La fecha y hora actuales están en el contexto del sistema.`;
+REGLAS: No inventes hospitales, doctores ni horarios — usá siempre las herramientas.`;
 
 const assistant = {
   name: "Turnos PY — Asistente de turnos",

@@ -13,9 +13,18 @@ import {
 } from "../../../server/schema";
 import {
   createAppointment as createAppointmentValidated,
+  rescheduleAppointment as rescheduleAppointmentSafe,
+  addToWaitlist,
+  getAvailableSlots as getAvailableSlotsHelper,
   isUniqueViolation,
   SCHEDULED_SLOT_INDEX,
 } from "../../../server/db";
+
+// The slot-computation logic moved into server/db.ts; this thin wrapper keeps
+// the existing admin server action so admin components don't need to change.
+export async function getAvailableSlots(doctorId: string, date: string): Promise<string[]> {
+  return getAvailableSlotsHelper(doctorId, date);
+}
 
 function revalidateAdmin() {
   revalidatePath("/admin", "layout");
@@ -143,14 +152,8 @@ export async function rescheduleAppointment(formData: FormData) {
   const id = formData.get("id") as string;
   const date = formData.get("date") as string;
   const time = formData.get("time") as string;
-  try {
-    await db.update(appointments).set({ date, time }).where(eq(appointments.id, id));
-  } catch (err) {
-    if (isUniqueViolation(err, SCHEDULED_SLOT_INDEX)) {
-      throw new Error(`That doctor already has an appointment at ${date} ${time}.`);
-    }
-    throw err;
-  }
+  const res = await rescheduleAppointmentSafe(id, date, time);
+  if (!res.ok) throw new Error(res.error);
   revalidateAdmin();
 }
 
@@ -247,13 +250,13 @@ export async function offerSlotToWaitlistEntry(formData: FormData) {
 // --- Lista de Espera ---
 
 export async function createWaitlistEntry(formData: FormData) {
-  await db.insert(waitlist_entries).values({
+  await addToWaitlist({
     patient_id: formData.get("patient_id") as string,
-    doctor_id: (formData.get("doctor_id") as string) || null,
+    doctor_id: (formData.get("doctor_id") as string) || undefined,
     specialty: formData.get("specialty") as string,
     date_from: formData.get("date_from") as string,
     date_to: formData.get("date_to") as string,
-    time_pref: (formData.get("time_pref") as string) || null,
+    time_pref: (formData.get("time_pref") as string) || undefined,
     priority: parseInt(formData.get("priority") as string) || 0,
   });
   revalidateAdmin();
@@ -288,49 +291,6 @@ export async function saveDoctorSchedule(formData: FormData) {
       set: { start_time: startTime, end_time: endTime, slot_duration: slotDuration },
     });
   revalidateAdmin();
-}
-
-export async function getAvailableSlots(doctorId: string, date: string): Promise<string[]> {
-  const dayOfWeek = new Date(date + "T12:00:00").getDay();
-
-  const [schedule] = await db
-    .select()
-    .from(doctor_schedules)
-    .where(
-      and(eq(doctor_schedules.doctor_id, doctorId), eq(doctor_schedules.day_of_week, dayOfWeek)),
-    )
-    .limit(1);
-  if (!schedule) return [];
-
-  const existing = await db
-    .select({ time: appointments.time })
-    .from(appointments)
-    .where(
-      and(
-        eq(appointments.doctor_id, doctorId),
-        eq(appointments.date, date),
-        eq(appointments.status, "scheduled"),
-      ),
-    );
-  const bookedTimes = new Set(existing.map((a) => a.time));
-
-  const slots: string[] = [];
-  const [startH, startM] = schedule.start_time.split(":").map(Number);
-  const [endH, endM] = schedule.end_time.split(":").map(Number);
-  let current = startH * 60 + startM;
-  const end = endH * 60 + endM;
-
-  while (current + schedule.slot_duration <= end) {
-    const h = String(Math.floor(current / 60)).padStart(2, "0");
-    const m = String(current % 60).padStart(2, "0");
-    const timeStr = `${h}:${m}`;
-    if (!bookedTimes.has(timeStr)) {
-      slots.push(timeStr);
-    }
-    current += schedule.slot_duration;
-  }
-
-  return slots;
 }
 
 // --- Turnos Recurrentes ---
