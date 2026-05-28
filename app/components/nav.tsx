@@ -9,8 +9,6 @@ const navItems = [
   { href: "/hospitales", label: "Hospitales" },
   { href: "/especialidades", label: "Especialidades" },
   { href: "/doctores", label: "Doctores" },
-  { href: "/pacientes", label: "Pacientes" },
-  { href: "/turnos", label: "Turnos" },
   { href: "/asistente", label: "Asistente" },
 ];
 
