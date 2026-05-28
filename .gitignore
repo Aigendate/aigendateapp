@@ -13,3 +13,8 @@ skills-lock.json
 .react-router/
 
 .vercel
+
+# Local env (do not commit secrets)
+.env
+.env.local
+.env.*.local
