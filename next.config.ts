@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
-  serverExternalPackages: ["better-sqlite3", "@prisma/adapter-better-sqlite3"],
+  serverExternalPackages: ["pg"],
   transpilePackages: ["@schedule-x/react", "@schedule-x/calendar", "@schedule-x/theme-default", "@schedule-x/event-modal", "@schedule-x/events-service", "@schedule-x/current-time"],
   webpack: (config) => {
     config.resolve.alias = {

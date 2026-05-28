@@ -1,6 +1,13 @@
-import Database from "better-sqlite3";
-import { randomUUID } from "node:crypto";
-import path from "node:path";
+import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { db } from "./client";
+import {
+  hospitals,
+  doctors,
+  patients,
+  appointments,
+  doctor_schedules,
+  waitlist_entries,
+} from "./schema";
 
 export interface Hospital {
   id: string;
@@ -51,83 +58,21 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function initDb(dbPath?: string): Database.Database {
-  const resolvedPath = dbPath ?? path.join(process.cwd(), "turnos.db");
-  const db = new Database(resolvedPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS hospitals (
-      id      TEXT PRIMARY KEY,
-      name    TEXT NOT NULL,
-      address TEXT NOT NULL,
-      lat     REAL NOT NULL,
-      lng     REAL NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS patients (
-      id         TEXT PRIMARY KEY,
-      name       TEXT NOT NULL,
-      email      TEXT UNIQUE,
-      phone      TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS doctors (
-      id          TEXT PRIMARY KEY,
-      name        TEXT NOT NULL,
-      specialty   TEXT NOT NULL,
-      hospital_id TEXT NOT NULL REFERENCES hospitals(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS appointments (
-      id          TEXT PRIMARY KEY,
-      hospital_id TEXT NOT NULL REFERENCES hospitals(id),
-      patient_id  TEXT NOT NULL REFERENCES patients(id),
-      doctor_id   TEXT NOT NULL REFERENCES doctors(id),
-      date        TEXT NOT NULL,
-      time        TEXT NOT NULL,
-      status      TEXT NOT NULL DEFAULT 'scheduled',
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
-
-  return db;
-}
-
-declare global {
-  var __turnos_db: Database.Database | undefined;
-}
-
-export function getDb(dbPath?: string): Database.Database {
-  if (!globalThis.__turnos_db) {
-    globalThis.__turnos_db = initDb(dbPath);
-  }
-  return globalThis.__turnos_db;
-}
-
-export function insertHospital(
-  db: Database.Database,
+export async function insertHospital(
   params: { name: string; address: string; lat: number; lng: number }
-): string {
-  const id = randomUUID();
-  db.prepare("INSERT INTO hospitals (id, name, address, lat, lng) VALUES (?, ?, ?, ?, ?)").run(
-    id, params.name, params.address, params.lat, params.lng
-  );
-  return id;
+): Promise<string> {
+  const [row] = await db.insert(hospitals).values(params).returning({ id: hospitals.id });
+  return row.id;
 }
 
-export function listHospitals(
-  db: Database.Database,
+export async function listHospitals(
   opts: { name?: string; lat?: number; lng?: number } = {}
-): (Hospital & { distance_km?: number })[] {
-  let rows: Hospital[];
-  if (opts.name) {
-    rows = db.prepare("SELECT * FROM hospitals WHERE name LIKE ?").all(`%${opts.name}%`) as Hospital[];
-  } else {
-    rows = db.prepare("SELECT * FROM hospitals").all() as Hospital[];
-  }
+): Promise<(Hospital & { distance_km?: number })[]> {
+  const rows = await db
+    .select()
+    .from(hospitals)
+    .where(opts.name ? ilike(hospitals.name, `%${opts.name}%`) : undefined);
+
   if (opts.lat !== undefined && opts.lng !== undefined) {
     return rows
       .map((h) => ({
@@ -139,201 +84,266 @@ export function listHospitals(
   return rows;
 }
 
-export function insertDoctor(
-  db: Database.Database,
+export async function insertDoctor(
   params: { name: string; specialty: string; hospital_id: string }
-): string {
-  const id = randomUUID();
-  db.prepare("INSERT INTO doctors (id, name, specialty, hospital_id) VALUES (?, ?, ?, ?)").run(
-    id, params.name, params.specialty, params.hospital_id
-  );
-  return id;
+): Promise<string> {
+  const [row] = await db.insert(doctors).values(params).returning({ id: doctors.id });
+  return row.id;
 }
 
-export function listDoctors(
-  db: Database.Database,
+export async function listDoctors(
   filters: { hospital_id?: string; specialty?: string; name?: string } = {}
-): Doctor[] {
-  const conditions: string[] = [];
-  const values: unknown[] = [];
+): Promise<Doctor[]> {
+  const conditions = [
+    filters.hospital_id ? eq(doctors.hospital_id, filters.hospital_id) : undefined,
+    filters.specialty ? ilike(doctors.specialty, `%${filters.specialty}%`) : undefined,
+    filters.name ? ilike(doctors.name, `%${filters.name}%`) : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
-  if (filters.hospital_id) { conditions.push("d.hospital_id = ?"); values.push(filters.hospital_id); }
-  if (filters.specialty) { conditions.push("d.specialty LIKE ?"); values.push(`%${filters.specialty}%`); }
-  if (filters.name) { conditions.push("d.name LIKE ?"); values.push(`%${filters.name}%`); }
+  const rows = await db
+    .select({
+      id: doctors.id,
+      name: doctors.name,
+      specialty: doctors.specialty,
+      hospital_id: doctors.hospital_id,
+      hospital_name: hospitals.name,
+    })
+    .from(doctors)
+    .innerJoin(hospitals, eq(doctors.hospital_id, hospitals.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(asc(doctors.specialty), asc(doctors.name));
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  return db
-    .prepare(
-      `SELECT d.*, h.name as hospital_name FROM doctors d JOIN hospitals h ON d.hospital_id = h.id ${where} ORDER BY d.specialty, d.name`
-    )
-    .all(...values) as Doctor[];
+  return rows;
 }
 
-export function registerPatient(
-  db: Database.Database,
+export async function registerPatient(
   params: { name: string; email?: string; phone?: string }
-): { ok: true; patient: Patient } | { ok: false; error: string } {
+): Promise<{ ok: true; patient: Patient } | { ok: false; error: string }> {
   if (params.email) {
-    const existing = db.prepare("SELECT id FROM patients WHERE email = ?").get(params.email) as Patient | undefined;
-    if (existing) return { ok: false, error: `A patient with email ${params.email} is already registered.` };
+    const existing = await db
+      .select({ id: patients.id })
+      .from(patients)
+      .where(eq(patients.email, params.email))
+      .limit(1);
+    if (existing.length > 0) {
+      return { ok: false, error: `A patient with email ${params.email} is already registered.` };
+    }
   }
-
-  const id = randomUUID();
-  db.prepare("INSERT INTO patients (id, name, email, phone) VALUES (?, ?, ?, ?)").run(
-    id, params.name, params.email ?? null, params.phone ?? null
-  );
+  const [row] = await db
+    .insert(patients)
+    .values({ name: params.name, email: params.email ?? null, phone: params.phone ?? null })
+    .returning();
   return {
     ok: true,
-    patient: { id, name: params.name, email: params.email ?? "", phone: params.phone ?? "", created_at: new Date().toISOString() },
+    patient: {
+      id: row.id,
+      name: row.name,
+      email: row.email ?? "",
+      phone: row.phone ?? "",
+      created_at: row.created_at.toISOString(),
+    },
   };
 }
 
-export function listPatients(db: Database.Database, search?: string): Patient[] {
-  if (search) {
-    const pattern = `%${search}%`;
-    return db.prepare("SELECT * FROM patients WHERE name LIKE ? OR email LIKE ? ORDER BY name").all(pattern, pattern) as Patient[];
-  }
-  return db.prepare("SELECT * FROM patients ORDER BY name").all() as Patient[];
+export async function listPatients(search?: string): Promise<Patient[]> {
+  const rows = await db
+    .select()
+    .from(patients)
+    .where(
+      search
+        ? or(ilike(patients.name, `%${search}%`), ilike(patients.email, `%${search}%`))
+        : undefined,
+    )
+    .orderBy(asc(patients.name));
+  return rows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    email: p.email ?? "",
+    phone: p.phone ?? "",
+    created_at: p.created_at.toISOString(),
+  }));
 }
 
-export function createAppointment(
-  db: Database.Database,
+export async function createAppointment(
   params: { hospital_id: string; patient_id: string; doctor_id: string; date: string; time: string }
-): { ok: true; appointment: Appointment } | { ok: false; error: string } {
-  const hospital = db.prepare("SELECT id FROM hospitals WHERE id = ?").get(params.hospital_id) as Hospital | undefined;
+): Promise<{ ok: true; appointment: Appointment } | { ok: false; error: string }> {
+  const [hospital] = await db.select().from(hospitals).where(eq(hospitals.id, params.hospital_id)).limit(1);
   if (!hospital) return { ok: false, error: `Hospital not found: ${params.hospital_id}` };
 
-  const patient = db.prepare("SELECT id FROM patients WHERE id = ?").get(params.patient_id) as Patient | undefined;
+  const [patient] = await db.select().from(patients).where(eq(patients.id, params.patient_id)).limit(1);
   if (!patient) return { ok: false, error: `Patient not found: ${params.patient_id}. Register them first with register_patient.` };
 
-  const doctor = db.prepare("SELECT * FROM doctors WHERE id = ?").get(params.doctor_id) as Doctor | undefined;
+  const [doctor] = await db.select().from(doctors).where(eq(doctors.id, params.doctor_id)).limit(1);
   if (!doctor) return { ok: false, error: `Doctor not found: ${params.doctor_id}. Use list_doctors to find one.` };
 
   if (doctor.hospital_id !== params.hospital_id)
     return { ok: false, error: `Dr. ${doctor.name} does not practice at this hospital.` };
 
-  const conflict = db
-    .prepare("SELECT id FROM appointments WHERE doctor_id = ? AND date = ? AND time = ? AND status = 'scheduled'")
-    .get(params.doctor_id, params.date, params.time);
+  const [conflict] = await db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.doctor_id, params.doctor_id),
+        eq(appointments.date, params.date),
+        eq(appointments.time, params.time),
+        eq(appointments.status, "scheduled"),
+      ),
+    )
+    .limit(1);
   if (conflict)
     return { ok: false, error: `Dr. ${doctor.name} already has an appointment at ${params.date} ${params.time}.` };
 
-  const id = randomUUID();
-  db.prepare("INSERT INTO appointments (id, hospital_id, patient_id, doctor_id, date, time) VALUES (?, ?, ?, ?, ?, ?)").run(
-    id, params.hospital_id, params.patient_id, params.doctor_id, params.date, params.time
-  );
-
-  return { ok: true, appointment: { id, ...params, status: "scheduled", created_at: new Date().toISOString() } };
+  const [row] = await db.insert(appointments).values(params).returning();
+  return {
+    ok: true,
+    appointment: {
+      id: row.id,
+      hospital_id: row.hospital_id,
+      patient_id: row.patient_id,
+      doctor_id: row.doctor_id,
+      date: row.date,
+      time: row.time,
+      status: row.status,
+      created_at: row.created_at.toISOString(),
+    },
+  };
 }
 
-export function listAppointments(
-  db: Database.Database,
+export async function listAppointments(
   filters: { hospital_id?: string; date?: string; doctor_id?: string; patient_id?: string; status?: string }
-): Appointment[] {
-  const conditions: string[] = [];
-  const values: unknown[] = [];
+): Promise<Appointment[]> {
+  const conditions = [
+    filters.hospital_id ? eq(appointments.hospital_id, filters.hospital_id) : undefined,
+    filters.date ? eq(appointments.date, filters.date) : undefined,
+    filters.doctor_id ? eq(appointments.doctor_id, filters.doctor_id) : undefined,
+    filters.patient_id ? eq(appointments.patient_id, filters.patient_id) : undefined,
+    eq(appointments.status, filters.status ?? "scheduled"),
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
-  if (filters.hospital_id) { conditions.push("a.hospital_id = ?"); values.push(filters.hospital_id); }
-  if (filters.date) { conditions.push("a.date = ?"); values.push(filters.date); }
-  if (filters.doctor_id) { conditions.push("a.doctor_id = ?"); values.push(filters.doctor_id); }
-  if (filters.patient_id) { conditions.push("a.patient_id = ?"); values.push(filters.patient_id); }
-  conditions.push("a.status = ?");
-  values.push(filters.status ?? "scheduled");
+  const rows = await db
+    .select({
+      id: appointments.id,
+      hospital_id: appointments.hospital_id,
+      hospital_name: hospitals.name,
+      patient_id: appointments.patient_id,
+      patient_name: patients.name,
+      doctor_id: appointments.doctor_id,
+      doctor_name: doctors.name,
+      specialty: doctors.specialty,
+      date: appointments.date,
+      time: appointments.time,
+      status: appointments.status,
+      created_at: appointments.created_at,
+    })
+    .from(appointments)
+    .innerJoin(hospitals, eq(appointments.hospital_id, hospitals.id))
+    .innerJoin(patients, eq(appointments.patient_id, patients.id))
+    .innerJoin(doctors, eq(appointments.doctor_id, doctors.id))
+    .where(and(...conditions))
+    .orderBy(asc(appointments.date), asc(appointments.time));
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  return db
-    .prepare(
-      `SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty
-       FROM appointments a
-       JOIN hospitals h ON a.hospital_id = h.id
-       JOIN patients p ON a.patient_id = p.id
-       JOIN doctors d ON a.doctor_id = d.id
-       ${where} ORDER BY a.date, a.time`
-    )
-    .all(...values) as Appointment[];
+  return rows.map((r) => ({ ...r, created_at: r.created_at.toISOString() }));
 }
 
-// --- Update / Delete helpers ---
-
-export function updatePatient(
-  db: Database.Database,
+export async function updatePatient(
   id: string,
   params: { name?: string; email?: string; phone?: string }
-): void {
-  const sets: string[] = [];
-  const values: unknown[] = [];
-  if (params.name !== undefined) { sets.push("name = ?"); values.push(params.name); }
-  if (params.email !== undefined) { sets.push("email = ?"); values.push(params.email); }
-  if (params.phone !== undefined) { sets.push("phone = ?"); values.push(params.phone); }
-  if (sets.length === 0) return;
-  values.push(id);
-  db.prepare(`UPDATE patients SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+): Promise<void> {
+  const data: Record<string, unknown> = {};
+  if (params.name !== undefined) data.name = params.name;
+  if (params.email !== undefined) data.email = params.email;
+  if (params.phone !== undefined) data.phone = params.phone;
+  if (Object.keys(data).length === 0) return;
+  await db.update(patients).set(data).where(eq(patients.id, id));
 }
 
-export function deletePatient(db: Database.Database, id: string): void {
-  db.prepare("DELETE FROM appointments WHERE patient_id = ?").run(id);
-  db.prepare("DELETE FROM patients WHERE id = ?").run(id);
+export async function deletePatient(id: string): Promise<void> {
+  await db.delete(waitlist_entries).where(eq(waitlist_entries.patient_id, id));
+  await db.delete(appointments).where(eq(appointments.patient_id, id));
+  await db.delete(patients).where(eq(patients.id, id));
 }
 
-export function updateHospital(
-  db: Database.Database,
+export async function updateHospital(
   id: string,
   params: { name?: string; address?: string; lat?: number; lng?: number }
-): void {
-  const sets: string[] = [];
-  const values: unknown[] = [];
-  if (params.name !== undefined) { sets.push("name = ?"); values.push(params.name); }
-  if (params.address !== undefined) { sets.push("address = ?"); values.push(params.address); }
-  if (params.lat !== undefined) { sets.push("lat = ?"); values.push(params.lat); }
-  if (params.lng !== undefined) { sets.push("lng = ?"); values.push(params.lng); }
-  if (sets.length === 0) return;
-  values.push(id);
-  db.prepare(`UPDATE hospitals SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+): Promise<void> {
+  const data: Record<string, unknown> = {};
+  if (params.name !== undefined) data.name = params.name;
+  if (params.address !== undefined) data.address = params.address;
+  if (params.lat !== undefined) data.lat = params.lat;
+  if (params.lng !== undefined) data.lng = params.lng;
+  if (Object.keys(data).length === 0) return;
+  await db.update(hospitals).set(data).where(eq(hospitals.id, id));
 }
 
-export function deleteHospital(db: Database.Database, id: string): void {
-  db.prepare("DELETE FROM appointments WHERE hospital_id = ?").run(id);
-  db.prepare("DELETE FROM doctors WHERE hospital_id = ?").run(id);
-  db.prepare("DELETE FROM hospitals WHERE id = ?").run(id);
+export async function deleteHospital(id: string): Promise<void> {
+  const hospitalDoctors = await db
+    .select({ id: doctors.id })
+    .from(doctors)
+    .where(eq(doctors.hospital_id, id));
+  const doctorIds = hospitalDoctors.map((d) => d.id);
+  if (doctorIds.length > 0) {
+    await db.delete(waitlist_entries).where(inArray(waitlist_entries.doctor_id, doctorIds));
+    await db.delete(doctor_schedules).where(inArray(doctor_schedules.doctor_id, doctorIds));
+  }
+  await db.delete(appointments).where(eq(appointments.hospital_id, id));
+  await db.delete(doctors).where(eq(doctors.hospital_id, id));
+  await db.delete(hospitals).where(eq(hospitals.id, id));
 }
 
-export function updateDoctor(
-  db: Database.Database,
+export async function updateDoctor(
   id: string,
   params: { name?: string; specialty?: string; hospital_id?: string }
-): void {
-  const sets: string[] = [];
-  const values: unknown[] = [];
-  if (params.name !== undefined) { sets.push("name = ?"); values.push(params.name); }
-  if (params.specialty !== undefined) { sets.push("specialty = ?"); values.push(params.specialty); }
-  if (params.hospital_id !== undefined) { sets.push("hospital_id = ?"); values.push(params.hospital_id); }
-  if (sets.length === 0) return;
-  values.push(id);
-  db.prepare(`UPDATE doctors SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+): Promise<void> {
+  const data: Record<string, unknown> = {};
+  if (params.name !== undefined) data.name = params.name;
+  if (params.specialty !== undefined) data.specialty = params.specialty;
+  if (params.hospital_id !== undefined) data.hospital_id = params.hospital_id;
+  if (Object.keys(data).length === 0) return;
+  await db.update(doctors).set(data).where(eq(doctors.id, id));
 }
 
-export function deleteDoctor(db: Database.Database, id: string): void {
-  db.prepare("DELETE FROM appointments WHERE doctor_id = ?").run(id);
-  db.prepare("DELETE FROM doctors WHERE id = ?").run(id);
+export async function deleteDoctor(id: string): Promise<void> {
+  await db.delete(waitlist_entries).where(eq(waitlist_entries.doctor_id, id));
+  await db.delete(doctor_schedules).where(eq(doctor_schedules.doctor_id, id));
+  await db.delete(appointments).where(eq(appointments.doctor_id, id));
+  await db.delete(doctors).where(eq(doctors.id, id));
 }
 
-export function cancelAppointment(
-  db: Database.Database,
+export async function cancelAppointment(
   id: string
-): { ok: true; appointment: Appointment } | { ok: false; error: string } {
-  const row = db
-    .prepare(
-      `SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty
-       FROM appointments a
-       JOIN hospitals h ON a.hospital_id = h.id
-       JOIN patients p ON a.patient_id = p.id
-       JOIN doctors d ON a.doctor_id = d.id
-       WHERE a.id = ?`
-    )
-    .get(id) as Appointment | undefined;
+): Promise<{ ok: true; appointment: Appointment } | { ok: false; error: string }> {
+  const [row] = await db
+    .select({
+      id: appointments.id,
+      hospital_id: appointments.hospital_id,
+      hospital_name: hospitals.name,
+      patient_id: appointments.patient_id,
+      patient_name: patients.name,
+      doctor_id: appointments.doctor_id,
+      doctor_name: doctors.name,
+      specialty: doctors.specialty,
+      date: appointments.date,
+      time: appointments.time,
+      status: appointments.status,
+      created_at: appointments.created_at,
+    })
+    .from(appointments)
+    .innerJoin(hospitals, eq(appointments.hospital_id, hospitals.id))
+    .innerJoin(patients, eq(appointments.patient_id, patients.id))
+    .innerJoin(doctors, eq(appointments.doctor_id, doctors.id))
+    .where(eq(appointments.id, id))
+    .limit(1);
+
   if (!row) return { ok: false, error: "Appointment not found." };
   if (row.status === "cancelled") return { ok: false, error: "Appointment is already cancelled." };
 
-  db.prepare("UPDATE appointments SET status = 'cancelled' WHERE id = ?").run(id);
-  return { ok: true, appointment: { ...row, status: "cancelled" } };
+  await db.update(appointments).set({ status: "cancelled" }).where(eq(appointments.id, id));
+  return {
+    ok: true,
+    appointment: { ...row, status: "cancelled", created_at: row.created_at.toISOString() },
+  };
 }
+
+export { sql };

@@ -1,4 +1,6 @@
-import { getDb } from "../../server/db.server";
+import { asc, eq, sql } from "drizzle-orm";
+import { db } from "../../server/client";
+import { appointments, doctors, hospitals, patients } from "../../server/schema";
 import { StatCard } from "~/components/stat-card";
 import { BarChart } from "~/components/bar-chart";
 import { Badge } from "~/components/ui/badge";
@@ -12,42 +14,72 @@ import {
   TableCell,
 } from "~/components/ui/table";
 
-export default function IndexPage() {
-  const db = getDb();
-  const stats = {
-    hospitals: (db.prepare("SELECT COUNT(*) as n FROM hospitals").get() as { n: number }).n,
-    patients: (db.prepare("SELECT COUNT(*) as n FROM patients").get() as { n: number }).n,
-    doctors: (db.prepare("SELECT COUNT(*) as n FROM doctors").get() as { n: number }).n,
-    scheduled: (db.prepare("SELECT COUNT(*) as n FROM appointments WHERE status = 'scheduled'").get() as { n: number }).n,
-    cancelled: (db.prepare("SELECT COUNT(*) as n FROM appointments WHERE status = 'cancelled'").get() as { n: number }).n,
-  };
+async function count(table: typeof hospitals | typeof patients | typeof doctors): Promise<number> {
+  const [row] = await db.select({ c: sql<number>`count(*)::int` }).from(table);
+  return row.c;
+}
 
-  const specialtyBreakdown = db
-    .prepare(
-      `SELECT d.specialty, COUNT(*) as count FROM appointments a JOIN doctors d ON a.doctor_id = d.id WHERE a.status = 'scheduled' GROUP BY d.specialty ORDER BY count DESC`
-    )
-    .all() as { specialty: string; count: number }[];
+async function countAppointments(status: string): Promise<number> {
+  const [row] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(appointments)
+    .where(eq(appointments.status, status));
+  return row.c;
+}
 
-  const topHospitals = db
-    .prepare(
-      `SELECT h.name, COUNT(a.id) as count FROM hospitals h LEFT JOIN appointments a ON h.id = a.hospital_id AND a.status = 'scheduled' GROUP BY h.id HAVING count > 0 ORDER BY count DESC LIMIT 10`
-    )
-    .all() as { name: string; count: number }[];
+export default async function IndexPage() {
+  const [hospitalsCount, patientsCount, doctorsCount, scheduled, cancelled] = await Promise.all([
+    count(hospitals),
+    count(patients),
+    count(doctors),
+    countAppointments("scheduled"),
+    countAppointments("cancelled"),
+  ]);
+  const stats = { hospitals: hospitalsCount, patients: patientsCount, doctors: doctorsCount, scheduled, cancelled };
 
-  const appointments = db
-    .prepare(
-      `SELECT a.*, h.name as hospital_name, p.name as patient_name, d.name as doctor_name, d.specialty FROM appointments a JOIN hospitals h ON a.hospital_id = h.id JOIN patients p ON a.patient_id = p.id JOIN doctors d ON a.doctor_id = d.id ORDER BY a.date, a.time`
-    )
-    .all() as {
-    id: string;
-    date: string;
-    time: string;
-    patient_name: string;
-    doctor_name: string;
-    specialty: string;
-    hospital_name: string;
-    status: string;
-  }[];
+  const specialtyRows = await db
+    .select({
+      specialty: doctors.specialty,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(appointments)
+    .innerJoin(doctors, eq(appointments.doctor_id, doctors.id))
+    .where(eq(appointments.status, "scheduled"))
+    .groupBy(doctors.specialty);
+
+  const specialtyBreakdown = [...specialtyRows].sort((a, b) => b.count - a.count);
+
+  const topHospitals = (
+    await db
+      .select({
+        name: hospitals.name,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(appointments)
+      .innerJoin(hospitals, eq(appointments.hospital_id, hospitals.id))
+      .where(eq(appointments.status, "scheduled"))
+      .groupBy(hospitals.name)
+  )
+    .filter((h) => h.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+
+  const apptRows = await db
+    .select({
+      id: appointments.id,
+      date: appointments.date,
+      time: appointments.time,
+      status: appointments.status,
+      patient_name: patients.name,
+      doctor_name: doctors.name,
+      specialty: doctors.specialty,
+      hospital_name: hospitals.name,
+    })
+    .from(appointments)
+    .innerJoin(hospitals, eq(appointments.hospital_id, hospitals.id))
+    .innerJoin(patients, eq(appointments.patient_id, patients.id))
+    .innerJoin(doctors, eq(appointments.doctor_id, doctors.id))
+    .orderBy(asc(appointments.date), asc(appointments.time));
 
   return (
     <>
@@ -105,7 +137,7 @@ export default function IndexPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {appointments.map((a) => (
+              {apptRows.map((a) => (
                 <TableRow key={a.id}>
                   <TableCell>{a.date}</TableCell>
                   <TableCell>{a.time}</TableCell>
