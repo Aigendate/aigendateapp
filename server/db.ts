@@ -76,7 +76,14 @@ export async function listHospitals(
   const rows = await db
     .select()
     .from(hospitals)
-    .where(opts.name ? ilike(hospitals.name, `%${opts.name}%`) : undefined);
+    .where(
+      opts.name
+        ? or(
+            ilike(hospitals.name, `%${opts.name}%`),
+            ilike(hospitals.address, `%${opts.name}%`),
+          )
+        : undefined,
+    );
 
   if (opts.lat !== undefined && opts.lng !== undefined) {
     return rows
@@ -97,12 +104,15 @@ export async function insertDoctor(
 }
 
 export async function listDoctors(
-  filters: { hospital_id?: string; specialty?: string; name?: string } = {}
+  filters: { hospital_id?: string; specialty?: string; name?: string; city?: string } = {}
 ): Promise<Doctor[]> {
   const conditions = [
     filters.hospital_id ? eq(doctors.hospital_id, filters.hospital_id) : undefined,
     filters.specialty ? ilike(doctors.specialty, `%${filters.specialty}%`) : undefined,
     filters.name ? ilike(doctors.name, `%${filters.name}%`) : undefined,
+    filters.city
+      ? or(ilike(hospitals.address, `%${filters.city}%`), ilike(hospitals.name, `%${filters.city}%`))
+      : undefined,
   ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
   const rows = await db

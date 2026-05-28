@@ -60,6 +60,7 @@ async function dispatch(name: string, args: Record<string, unknown>): Promise<st
         name: str(args.nombre),
         specialty: str(args.especialidad),
         hospital_id: str(args.hospital_id),
+        city: str(args.ciudad),
       });
       if (rows.length === 0)
         return "No encontré doctores con esos criterios. / No doctors found.";
