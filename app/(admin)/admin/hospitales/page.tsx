@@ -1,6 +1,6 @@
 import { asc, ilike } from "drizzle-orm";
 import { db } from "../../../../server/client";
-import { hospitals } from "../../../../server/schema";
+import { hospitals, doctors } from "../../../../server/schema";
 import { Badge } from "~/components/ui/badge";
 import { SearchInput } from "~/components/search-input";
 import {
@@ -11,7 +11,7 @@ import {
   TableHead,
   TableCell,
 } from "~/components/ui/table";
-import { HospitalActions, HospitalCreateForm } from "./client";
+import { HospitalActions, HospitalCreateForm, type HospitalDoctor } from "./client";
 
 export default async function AdminHospitalesPage({
   searchParams,
@@ -19,11 +19,31 @@ export default async function AdminHospitalesPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q } = await searchParams;
-  const rows = await db
-    .select()
-    .from(hospitals)
-    .where(q ? ilike(hospitals.name, `%${q}%`) : undefined)
-    .orderBy(asc(hospitals.name));
+  const [rows, doctorRows] = await Promise.all([
+    db
+      .select()
+      .from(hospitals)
+      .where(q ? ilike(hospitals.name, `%${q}%`) : undefined)
+      .orderBy(asc(hospitals.city), asc(hospitals.name)),
+    db
+      .select({
+        id: doctors.id,
+        name: doctors.name,
+        specialty: doctors.specialty,
+        hospital_id: doctors.hospital_id,
+      })
+      .from(doctors)
+      .orderBy(asc(doctors.specialty), asc(doctors.name)),
+  ]);
+
+  // Bucket doctors by hospital so each row can expand to its roster without a
+  // round-trip; rows are pre-sorted by specialty for grouping in the client.
+  const doctorsByHospital = new Map<string, HospitalDoctor[]>();
+  for (const d of doctorRows) {
+    const bucket = doctorsByHospital.get(d.hospital_id) ?? [];
+    bucket.push(d);
+    doctorsByHospital.set(d.hospital_id, bucket);
+  }
 
   return (
     <>
@@ -45,6 +65,7 @@ export default async function AdminHospitalesPage({
         <TableHeader>
           <TableRow>
             <TableHead>Nombre</TableHead>
+            <TableHead>Ciudad</TableHead>
             <TableHead>Direccion</TableHead>
             <TableHead>Lat</TableHead>
             <TableHead>Lng</TableHead>
@@ -53,11 +74,15 @@ export default async function AdminHospitalesPage({
         </TableHeader>
         <TableBody>
           {rows.map((h) => (
-            <HospitalActions key={h.id} hospital={h} />
+            <HospitalActions
+              key={h.id}
+              hospital={h}
+              doctors={doctorsByHospital.get(h.id) ?? []}
+            />
           ))}
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 No se encontraron hospitales.
               </TableCell>
             </TableRow>

@@ -66,6 +66,7 @@ export async function createHospital(formData: FormData) {
   await db.insert(hospitals).values({
     name: formData.get("name") as string,
     address: formData.get("address") as string,
+    city: (formData.get("city") as string) || null,
     lat: parseFloat(formData.get("lat") as string) || 0,
     lng: parseFloat(formData.get("lng") as string) || 0,
   });
@@ -79,6 +80,7 @@ export async function updateHospital(formData: FormData) {
     .set({
       name: formData.get("name") as string,
       address: formData.get("address") as string,
+      city: (formData.get("city") as string) || null,
       lat: parseFloat(formData.get("lat") as string) || 0,
       lng: parseFloat(formData.get("lng") as string) || 0,
     })

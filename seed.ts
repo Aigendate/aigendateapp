@@ -8,16 +8,16 @@ import { insertHospital, insertDoctor, registerPatient, createAppointment } from
 import { seedDoctorSchedules } from "./server/schedules-seed";
 
 const FALLBACK_HOSPITALS = [
-  { name: "Hospital Nacional de Itauguá", address: "Ruta 2, Itauguá, Paraguay", lat: -25.39, lng: -57.35 },
-  { name: "Hospital de Clínicas", address: "Av. Mariscal López, Asunción, Paraguay", lat: -25.29, lng: -57.60 },
-  { name: "Hospital Central del IPS", address: "Av. Sacramento, Asunción, Paraguay", lat: -25.27, lng: -57.62 },
-  { name: "Hospital Regional de Ciudad del Este", address: "Ciudad del Este, Paraguay", lat: -25.51, lng: -54.61 },
-  { name: "Hospital Regional de Encarnación", address: "Encarnación, Paraguay", lat: -27.33, lng: -55.87 },
-  { name: "Hospital Regional de Coronel Oviedo", address: "Coronel Oviedo, Paraguay", lat: -25.45, lng: -56.44 },
-  { name: "Hospital Regional de Concepción", address: "Concepción, Paraguay", lat: -23.40, lng: -57.43 },
-  { name: "Hospital Regional de Pedro Juan Caballero", address: "Pedro Juan Caballero, Paraguay", lat: -22.55, lng: -55.73 },
-  { name: "Hospital Materno Infantil San Pablo", address: "San Pablo, Asunción, Paraguay", lat: -25.30, lng: -57.59 },
-  { name: "Centro Médico Bautista", address: "Av. Rep. Argentina, Asunción, Paraguay", lat: -25.28, lng: -57.58 },
+  { name: "Hospital Nacional de Itauguá", address: "Ruta 2, Itauguá, Paraguay", city: "Itauguá", lat: -25.39, lng: -57.35 },
+  { name: "Hospital de Clínicas", address: "Av. Mariscal López, Asunción, Paraguay", city: "Asunción", lat: -25.29, lng: -57.60 },
+  { name: "Hospital Central del IPS", address: "Av. Sacramento, Asunción, Paraguay", city: "Asunción", lat: -25.27, lng: -57.62 },
+  { name: "Hospital Regional de Ciudad del Este", address: "Ciudad del Este, Paraguay", city: "Ciudad del Este", lat: -25.51, lng: -54.61 },
+  { name: "Hospital Regional de Encarnación", address: "Encarnación, Paraguay", city: "Encarnación", lat: -27.33, lng: -55.87 },
+  { name: "Hospital Regional de Coronel Oviedo", address: "Coronel Oviedo, Paraguay", city: "Coronel Oviedo", lat: -25.45, lng: -56.44 },
+  { name: "Hospital Regional de Concepción", address: "Concepción, Paraguay", city: "Concepción", lat: -23.40, lng: -57.43 },
+  { name: "Hospital Regional de Pedro Juan Caballero", address: "Pedro Juan Caballero, Paraguay", city: "Pedro Juan Caballero", lat: -22.55, lng: -55.73 },
+  { name: "Hospital Materno Infantil San Pablo", address: "San Pablo, Asunción, Paraguay", city: "Asunción", lat: -25.30, lng: -57.59 },
+  { name: "Centro Médico Bautista", address: "Av. Rep. Argentina, Asunción, Paraguay", city: "Asunción", lat: -25.28, lng: -57.58 },
 ];
 
 async function tableCount(table: typeof hospitals | typeof doctors): Promise<number> {
@@ -50,7 +50,7 @@ async function main() {
 
         const parts = [street, city, "Paraguay"].filter(Boolean);
         const address = parts.join(", ");
-        await insertHospital({ name, address, lat, lng: lon });
+        await insertHospital({ name, address, city: city || null, lat, lng: lon });
         hospitalCount++;
       }
       console.log(`Seeded ${hospitalCount} hospitals from ${csvPath}`);
