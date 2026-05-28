@@ -1,7 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "../../../server/prisma";
+import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
+import { db } from "../../../server/client";
+import {
+  hospitals,
+  doctors,
+  patients,
+  appointments,
+  doctor_schedules,
+  waitlist_entries,
+} from "../../../server/schema";
+import {
+  createAppointment as createAppointmentValidated,
+  isUniqueViolation,
+  SCHEDULED_SLOT_INDEX,
+} from "../../../server/db";
 
 function revalidateAdmin() {
   revalidatePath("/admin", "layout");
@@ -10,132 +24,118 @@ function revalidateAdmin() {
 // --- Pacientes ---
 
 export async function createPatient(formData: FormData) {
-  await prisma.patient.create({
-    data: {
-      name: formData.get("name") as string,
-      email: (formData.get("email") as string) || null,
-      phone: (formData.get("phone") as string) || null,
-    },
+  await db.insert(patients).values({
+    name: formData.get("name") as string,
+    email: (formData.get("email") as string) || null,
+    phone: (formData.get("phone") as string) || null,
   });
   revalidateAdmin();
 }
 
 export async function updatePatient(formData: FormData) {
   const id = formData.get("id") as string;
-  await prisma.patient.update({
-    where: { id },
-    data: {
+  await db
+    .update(patients)
+    .set({
       name: formData.get("name") as string,
       email: (formData.get("email") as string) || null,
       phone: (formData.get("phone") as string) || null,
-    },
-  });
+    })
+    .where(eq(patients.id, id));
   revalidateAdmin();
 }
 
 export async function deletePatient(formData: FormData) {
   const id = formData.get("id") as string;
-  await prisma.appointment.deleteMany({ where: { patient_id: id } });
-  await prisma.patient.delete({ where: { id } });
+  await db.delete(patients).where(eq(patients.id, id));
   revalidateAdmin();
 }
 
 // --- Hospitales ---
 
 export async function createHospital(formData: FormData) {
-  await prisma.hospital.create({
-    data: {
-      name: formData.get("name") as string,
-      address: formData.get("address") as string,
-      lat: parseFloat(formData.get("lat") as string) || 0,
-      lng: parseFloat(formData.get("lng") as string) || 0,
-    },
+  await db.insert(hospitals).values({
+    name: formData.get("name") as string,
+    address: formData.get("address") as string,
+    lat: parseFloat(formData.get("lat") as string) || 0,
+    lng: parseFloat(formData.get("lng") as string) || 0,
   });
   revalidateAdmin();
 }
 
 export async function updateHospital(formData: FormData) {
   const id = formData.get("id") as string;
-  await prisma.hospital.update({
-    where: { id },
-    data: {
+  await db
+    .update(hospitals)
+    .set({
       name: formData.get("name") as string,
       address: formData.get("address") as string,
       lat: parseFloat(formData.get("lat") as string) || 0,
       lng: parseFloat(formData.get("lng") as string) || 0,
-    },
-  });
+    })
+    .where(eq(hospitals.id, id));
   revalidateAdmin();
 }
 
 export async function deleteHospital(formData: FormData) {
   const id = formData.get("id") as string;
-  await prisma.appointment.deleteMany({ where: { hospital_id: id } });
-  await prisma.doctor.deleteMany({ where: { hospital_id: id } });
-  await prisma.hospital.delete({ where: { id } });
+  await db.delete(hospitals).where(eq(hospitals.id, id));
   revalidateAdmin();
 }
 
 // --- Doctores ---
 
 export async function createDoctor(formData: FormData) {
-  await prisma.doctor.create({
-    data: {
-      name: formData.get("name") as string,
-      specialty: formData.get("specialty") as string,
-      hospital_id: formData.get("hospital_id") as string,
-    },
+  await db.insert(doctors).values({
+    name: formData.get("name") as string,
+    specialty: formData.get("specialty") as string,
+    hospital_id: formData.get("hospital_id") as string,
   });
   revalidateAdmin();
 }
 
 export async function updateDoctor(formData: FormData) {
   const id = formData.get("id") as string;
-  await prisma.doctor.update({
-    where: { id },
-    data: {
+  await db
+    .update(doctors)
+    .set({
       name: formData.get("name") as string,
       specialty: formData.get("specialty") as string,
       hospital_id: formData.get("hospital_id") as string,
-    },
-  });
+    })
+    .where(eq(doctors.id, id));
   revalidateAdmin();
 }
 
 export async function deleteDoctor(formData: FormData) {
   const id = formData.get("id") as string;
-  await prisma.appointment.deleteMany({ where: { doctor_id: id } });
-  await prisma.doctor.delete({ where: { id } });
+  await db.delete(doctors).where(eq(doctors.id, id));
   revalidateAdmin();
 }
 
 // --- Turnos ---
 
 export async function createAppointment(formData: FormData) {
-  await prisma.appointment.create({
-    data: {
-      hospital_id: formData.get("hospital_id") as string,
-      patient_id: formData.get("patient_id") as string,
-      doctor_id: formData.get("doctor_id") as string,
-      date: formData.get("date") as string,
-      time: formData.get("time") as string,
-    },
+  const result = await createAppointmentValidated({
+    hospital_id: formData.get("hospital_id") as string,
+    patient_id: formData.get("patient_id") as string,
+    doctor_id: formData.get("doctor_id") as string,
+    date: formData.get("date") as string,
+    time: formData.get("time") as string,
   });
+  if (!result.ok) throw new Error(result.error);
   revalidateAdmin();
 }
 
 export async function cancelAppointment(formData: FormData) {
   const id = formData.get("id") as string;
-  await prisma.appointment.update({
-    where: { id },
-    data: { status: "cancelled" },
-  });
+  await db.update(appointments).set({ status: "cancelled" }).where(eq(appointments.id, id));
   revalidateAdmin();
 }
 
 export async function deleteAppointment(formData: FormData) {
   const id = formData.get("id") as string;
-  await prisma.appointment.delete({ where: { id } });
+  await db.delete(appointments).where(eq(appointments.id, id));
   revalidateAdmin();
 }
 
@@ -143,10 +143,14 @@ export async function rescheduleAppointment(formData: FormData) {
   const id = formData.get("id") as string;
   const date = formData.get("date") as string;
   const time = formData.get("time") as string;
-  await prisma.appointment.update({
-    where: { id },
-    data: { date, time },
-  });
+  try {
+    await db.update(appointments).set({ date, time }).where(eq(appointments.id, id));
+  } catch (err) {
+    if (isUniqueViolation(err, SCHEDULED_SLOT_INDEX)) {
+      throw new Error(`That doctor already has an appointment at ${date} ${time}.`);
+    }
+    throw err;
+  }
   revalidateAdmin();
 }
 
@@ -157,40 +161,50 @@ export async function cancelAndOfferWaitlist(formData: FormData): Promise<{
 }> {
   const id = formData.get("id") as string;
 
-  const appointment = await prisma.appointment.update({
-    where: { id },
-    data: { status: "cancelled" },
-    include: { doctor: { select: { specialty: true } } },
-  });
+  const [appointment] = await db
+    .update(appointments)
+    .set({ status: "cancelled" })
+    .where(eq(appointments.id, id))
+    .returning();
 
-  const candidates = await prisma.waitlistEntry.findMany({
-    where: {
-      status: "waiting",
-      specialty: appointment.doctor.specialty,
-      OR: [
-        { doctor_id: appointment.doctor_id },
-        { doctor_id: null },
-      ],
-      date_from: { lte: appointment.date },
-      date_to: { gte: appointment.date },
-    },
-    include: { patient: { select: { name: true, phone: true } } },
-    orderBy: [{ priority: "desc" }, { created_at: "asc" }],
-    take: 5,
-  });
+  const [doctor] = await db
+    .select({ specialty: doctors.specialty })
+    .from(doctors)
+    .where(eq(doctors.id, appointment.doctor_id))
+    .limit(1);
+
+  const candidates = await db
+    .select({
+      id: waitlist_entries.id,
+      patient_name: patients.name,
+      patient_phone: patients.phone,
+    })
+    .from(waitlist_entries)
+    .innerJoin(patients, eq(waitlist_entries.patient_id, patients.id))
+    .where(
+      and(
+        eq(waitlist_entries.status, "waiting"),
+        eq(waitlist_entries.specialty, doctor.specialty),
+        or(
+          eq(waitlist_entries.doctor_id, appointment.doctor_id),
+          sql`${waitlist_entries.doctor_id} IS NULL`,
+        ),
+        lte(waitlist_entries.date_from, appointment.date),
+        gte(waitlist_entries.date_to, appointment.date),
+      ),
+    )
+    .orderBy(desc(waitlist_entries.priority), asc(waitlist_entries.created_at))
+    .limit(5);
 
   revalidateAdmin();
 
   return {
     ok: true,
-    message: candidates.length > 0
-      ? `Turno cancelado. ${candidates.length} paciente(s) en lista de espera.`
-      : "Turno cancelado. No hay pacientes en lista de espera para este horario.",
-    candidates: candidates.map((c) => ({
-      id: c.id,
-      patient_name: c.patient.name,
-      patient_phone: c.patient.phone,
-    })),
+    message:
+      candidates.length > 0
+        ? `Turno cancelado. ${candidates.length} paciente(s) en lista de espera.`
+        : "Turno cancelado. No hay pacientes en lista de espera para este horario.",
+    candidates,
   };
 }
 
@@ -201,20 +215,31 @@ export async function offerSlotToWaitlistEntry(formData: FormData) {
   const doctorId = formData.get("doctor_id") as string;
   const hospitalId = formData.get("hospital_id") as string;
 
-  const entry = await prisma.waitlistEntry.update({
-    where: { id: waitlistId },
-    data: { status: "offered" },
-  });
+  const [entry] = await db
+    .update(waitlist_entries)
+    .set({ status: "offered" })
+    .where(eq(waitlist_entries.id, waitlistId))
+    .returning();
 
-  await prisma.appointment.create({
-    data: {
+  try {
+    await db.insert(appointments).values({
       patient_id: entry.patient_id,
       doctor_id: doctorId,
       hospital_id: hospitalId,
       date: appointmentDate,
       time: appointmentTime,
-    },
-  });
+    });
+  } catch (err) {
+    if (isUniqueViolation(err, SCHEDULED_SLOT_INDEX)) {
+      // Roll back the waitlist offer if the slot got taken between cancel and offer.
+      await db
+        .update(waitlist_entries)
+        .set({ status: "waiting" })
+        .where(eq(waitlist_entries.id, waitlistId));
+      throw new Error(`Slot ${appointmentDate} ${appointmentTime} is no longer available.`);
+    }
+    throw err;
+  }
 
   revalidateAdmin();
 }
@@ -222,23 +247,21 @@ export async function offerSlotToWaitlistEntry(formData: FormData) {
 // --- Lista de Espera ---
 
 export async function createWaitlistEntry(formData: FormData) {
-  await prisma.waitlistEntry.create({
-    data: {
-      patient_id: formData.get("patient_id") as string,
-      doctor_id: (formData.get("doctor_id") as string) || null,
-      specialty: formData.get("specialty") as string,
-      date_from: formData.get("date_from") as string,
-      date_to: formData.get("date_to") as string,
-      time_pref: (formData.get("time_pref") as string) || null,
-      priority: parseInt(formData.get("priority") as string) || 0,
-    },
+  await db.insert(waitlist_entries).values({
+    patient_id: formData.get("patient_id") as string,
+    doctor_id: (formData.get("doctor_id") as string) || null,
+    specialty: formData.get("specialty") as string,
+    date_from: formData.get("date_from") as string,
+    date_to: formData.get("date_to") as string,
+    time_pref: (formData.get("time_pref") as string) || null,
+    priority: parseInt(formData.get("priority") as string) || 0,
   });
   revalidateAdmin();
 }
 
 export async function deleteWaitlistEntry(formData: FormData) {
   const id = formData.get("id") as string;
-  await prisma.waitlistEntry.delete({ where: { id } });
+  await db.delete(waitlist_entries).where(eq(waitlist_entries.id, id));
   revalidateAdmin();
 }
 
@@ -251,26 +274,44 @@ export async function saveDoctorSchedule(formData: FormData) {
   const endTime = formData.get("end_time") as string;
   const slotDuration = parseInt(formData.get("slot_duration") as string) || 30;
 
-  await prisma.doctorSchedule.upsert({
-    where: { doctor_id_day_of_week: { doctor_id: doctorId, day_of_week: dayOfWeek } },
-    update: { start_time: startTime, end_time: endTime, slot_duration: slotDuration },
-    create: { doctor_id: doctorId, day_of_week: dayOfWeek, start_time: startTime, end_time: endTime, slot_duration: slotDuration },
-  });
+  await db
+    .insert(doctor_schedules)
+    .values({
+      doctor_id: doctorId,
+      day_of_week: dayOfWeek,
+      start_time: startTime,
+      end_time: endTime,
+      slot_duration: slotDuration,
+    })
+    .onConflictDoUpdate({
+      target: [doctor_schedules.doctor_id, doctor_schedules.day_of_week],
+      set: { start_time: startTime, end_time: endTime, slot_duration: slotDuration },
+    });
   revalidateAdmin();
 }
 
 export async function getAvailableSlots(doctorId: string, date: string): Promise<string[]> {
   const dayOfWeek = new Date(date + "T12:00:00").getDay();
 
-  const schedule = await prisma.doctorSchedule.findUnique({
-    where: { doctor_id_day_of_week: { doctor_id: doctorId, day_of_week: dayOfWeek } },
-  });
+  const [schedule] = await db
+    .select()
+    .from(doctor_schedules)
+    .where(
+      and(eq(doctor_schedules.doctor_id, doctorId), eq(doctor_schedules.day_of_week, dayOfWeek)),
+    )
+    .limit(1);
   if (!schedule) return [];
 
-  const existing = await prisma.appointment.findMany({
-    where: { doctor_id: doctorId, date, status: "scheduled" },
-    select: { time: true },
-  });
+  const existing = await db
+    .select({ time: appointments.time })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.doctor_id, doctorId),
+        eq(appointments.date, date),
+        eq(appointments.status, "scheduled"),
+      ),
+    );
   const bookedTimes = new Set(existing.map((a) => a.time));
 
   const slots: string[] = [];
@@ -303,35 +344,45 @@ export async function createRecurringAppointment(formData: FormData) {
   const weeksInterval = parseInt(formData.get("weeks_interval") as string) || 1;
   const occurrences = parseInt(formData.get("occurrences") as string) || 4;
 
-  const parent = await prisma.appointment.create({
-    data: {
-      hospital_id: hospitalId,
-      patient_id: patientId,
-      doctor_id: doctorId,
-      date: startDate,
-      time,
-      is_recurring: true,
-      recurrence_rule: `weekly:${weeksInterval}`,
-    },
-  });
+  try {
+    await db.transaction(async (tx) => {
+      const [parent] = await tx
+        .insert(appointments)
+        .values({
+          hospital_id: hospitalId,
+          patient_id: patientId,
+          doctor_id: doctorId,
+          date: startDate,
+          time,
+          is_recurring: true,
+          recurrence_rule: `weekly:${weeksInterval}`,
+        })
+        .returning();
 
-  const childData = [];
-  for (let i = 1; i < occurrences; i++) {
-    const d = new Date(startDate + "T12:00:00");
-    d.setDate(d.getDate() + 7 * weeksInterval * i);
-    childData.push({
-      hospital_id: hospitalId,
-      patient_id: patientId,
-      doctor_id: doctorId,
-      date: d.toISOString().split("T")[0],
-      time,
-      is_recurring: true,
-      recurrence_rule: `weekly:${weeksInterval}`,
-      parent_appointment_id: parent.id,
+      const childData = [];
+      for (let i = 1; i < occurrences; i++) {
+        const d = new Date(startDate + "T12:00:00");
+        d.setDate(d.getDate() + 7 * weeksInterval * i);
+        childData.push({
+          hospital_id: hospitalId,
+          patient_id: patientId,
+          doctor_id: doctorId,
+          date: d.toISOString().split("T")[0],
+          time,
+          is_recurring: true,
+          recurrence_rule: `weekly:${weeksInterval}`,
+          parent_appointment_id: parent.id,
+        });
+      }
+      if (childData.length > 0) {
+        await tx.insert(appointments).values(childData);
+      }
     });
-  }
-  if (childData.length > 0) {
-    await prisma.appointment.createMany({ data: childData });
+  } catch (err) {
+    if (isUniqueViolation(err, SCHEDULED_SLOT_INDEX)) {
+      throw new Error("One of the recurring slots is already booked at that time.");
+    }
+    throw err;
   }
 
   revalidateAdmin();
@@ -388,10 +439,10 @@ function pick<T>(arr: T[]): T {
 }
 
 async function clearAllData() {
-  await prisma.appointment.deleteMany();
-  await prisma.doctor.deleteMany();
-  await prisma.patient.deleteMany();
-  await prisma.hospital.deleteMany();
+  await db.delete(appointments);
+  await db.delete(doctors);
+  await db.delete(patients);
+  await db.delete(hospitals);
 }
 
 const SPECIALTIES = [
@@ -441,29 +492,29 @@ export async function scrapeAndSeed(): Promise<{ ok: boolean; message: string }>
 
     await clearAllData();
 
-    await prisma.hospital.createMany({ data: hospitalData });
-    const hospitals = await prisma.hospital.findMany({ select: { id: true } });
+    await db.insert(hospitals).values(hospitalData);
+    const hospitalRows = await db.select({ id: hospitals.id }).from(hospitals);
 
-    await prisma.doctor.createMany({
-      data: DOCTOR_NAMES.map((name) => ({
+    await db.insert(doctors).values(
+      DOCTOR_NAMES.map((name) => ({
         name,
         specialty: name === "Dr. Andrea Fleitas" ? "Cardiología" : pick(SPECIALTIES),
-        hospital_id: pick(hospitals).id,
+        hospital_id: pick(hospitalRows).id,
       })),
-    });
+    );
 
-    await prisma.patient.createMany({ data: PATIENT_NAMES });
+    await db.insert(patients).values(PATIENT_NAMES);
 
-    const doctors = await prisma.doctor.findMany({ select: { id: true, hospital_id: true } });
-    const patients = await prisma.patient.findMany({ select: { id: true } });
-    const patientIds = patients.map((p) => p.id);
+    const doctorRows = await db.select({ id: doctors.id, hospital_id: doctors.hospital_id }).from(doctors);
+    const patientRows = await db.select({ id: patients.id }).from(patients);
+    const patientIds = patientRows.map((p) => p.id);
 
     let scheduledCount = 0;
     let cancelledCount = 0;
     const today = new Date();
     const appointmentData = [];
     for (let i = 0; i < 30; i++) {
-      const doc = pick(doctors);
+      const doc = pick(doctorRows);
       const daysOffset = Math.floor(Math.random() * 14) + 1;
       const date = new Date(today);
       date.setDate(date.getDate() + daysOffset);
@@ -481,39 +532,35 @@ export async function scrapeAndSeed(): Promise<{ ok: boolean; message: string }>
       if (isCancelled) cancelledCount++;
       else scheduledCount++;
     }
-    await prisma.appointment.createMany({ data: appointmentData });
+    await db.insert(appointments).values(appointmentData);
 
     // Turno fijo: Catalina Espínola con Dr. Andrea Fleitas, viernes 2026-05-29
-    const catalina = await prisma.patient.findFirst({ where: { name: "Catalina Espínola" } });
-    const silvio = await prisma.patient.findFirst({ where: { name: "Silvio Sisa" } });
-    const fleitas = await prisma.doctor.findFirst({ where: { name: "Dr. Andrea Fleitas" } });
+    const [catalina] = await db.select().from(patients).where(eq(patients.name, "Catalina Espínola")).limit(1);
+    const [silvio] = await db.select().from(patients).where(eq(patients.name, "Silvio Sisa")).limit(1);
+    const [fleitas] = await db.select().from(doctors).where(eq(doctors.name, "Dr. Andrea Fleitas")).limit(1);
     if (catalina && fleitas) {
-      await prisma.appointment.create({
-        data: {
-          patient_id: catalina.id,
-          doctor_id: fleitas.id,
-          hospital_id: fleitas.hospital_id,
-          date: "2026-05-29",
-          time: "09:30",
-          status: "scheduled",
-        },
+      await db.insert(appointments).values({
+        patient_id: catalina.id,
+        doctor_id: fleitas.id,
+        hospital_id: fleitas.hospital_id,
+        date: "2026-05-29",
+        time: "09:30",
+        status: "scheduled",
       });
       scheduledCount++;
     }
 
     // Silvio Sisa en lista de espera para Cardiología con Dr. Andrea Fleitas
     if (silvio && fleitas) {
-      await prisma.waitlistEntry.create({
-        data: {
-          patient_id: silvio.id,
-          doctor_id: fleitas.id,
-          specialty: "Cardiología",
-          date_from: "2026-05-26",
-          date_to: "2026-06-30",
-          time_pref: "morning",
-          priority: 5,
-          status: "waiting",
-        },
+      await db.insert(waitlist_entries).values({
+        patient_id: silvio.id,
+        doctor_id: fleitas.id,
+        specialty: "Cardiología",
+        date_from: "2026-05-26",
+        date_to: "2026-06-30",
+        time_pref: "morning",
+        priority: 5,
+        status: "waiting",
       });
     }
 
@@ -532,15 +579,15 @@ export async function scrapeAndSeed(): Promise<{ ok: boolean; message: string }>
 
 export async function deleteAllData(): Promise<{ ok: boolean; message: string }> {
   try {
-    const appts = await prisma.appointment.deleteMany();
-    const docs = await prisma.doctor.deleteMany();
-    const patients = await prisma.patient.deleteMany();
-    const hospitals = await prisma.hospital.deleteMany();
+    const apptResult = await db.delete(appointments);
+    const docResult = await db.delete(doctors);
+    const patientResult = await db.delete(patients);
+    const hospitalResult = await db.delete(hospitals);
 
     revalidateAdmin();
     return {
       ok: true,
-      message: `Eliminados: ${hospitals.count} hospitales, ${docs.count} doctores, ${patients.count} pacientes, ${appts.count} turnos.`,
+      message: `Eliminados: ${hospitalResult.rowCount ?? 0} hospitales, ${docResult.rowCount ?? 0} doctores, ${patientResult.rowCount ?? 0} pacientes, ${apptResult.rowCount ?? 0} turnos.`,
     };
   } catch (err) {
     return {

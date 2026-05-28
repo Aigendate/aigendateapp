@@ -1,4 +1,4 @@
-import { getDb, listAppointments } from "../../../server/db.server";
+import { listAppointments } from "../../../server/db.server";
 import { Card, CardHeader, CardTitle, CardContent } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { TurnosFilters } from "./filters";
@@ -17,8 +17,7 @@ export default async function TurnosPage({
   searchParams: Promise<{ date?: string; status?: "scheduled" | "cancelled"; doctor_id?: string }>;
 }) {
   const { date, status, doctor_id } = await searchParams;
-  const db = getDb();
-  const appointments = listAppointments(db, { date, status, doctor_id });
+  const appointments = await listAppointments({ date, status, doctor_id });
 
   return (
     <Card>

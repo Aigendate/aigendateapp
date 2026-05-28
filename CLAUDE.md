@@ -5,17 +5,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev          # Next.js dev server on port 3456
-npm test             # Run all tests (vitest)
-npm run test:watch   # Tests in watch mode
+npm run dev           # Next.js dev server on port 3456
+npm test              # Run all tests (vitest)
+npm run test:watch    # Tests in watch mode
 npx vitest run tests/server/db.test.ts  # Single test file
-npm run typecheck    # tsc --noEmit
-npm run seed         # Seed DB from data/ CSVs (247 hospitals, 20 doctors, 10 patients)
-npm run scrape       # Re-fetch hospital CSVs from public APIs (requires pip install requests)
-npm run build        # Production build (next build)
-npm start            # Production server (next start)
-npm run mcp:stdio    # MCP server on stdio (for Claude Code)
+npm run typecheck     # tsc --noEmit
+npm run seed          # Seed DB from data/ CSVs (247 hospitals, 20 doctors, 10 patients)
+npm run scrape        # Re-fetch hospital CSVs from public APIs (requires pip install requests)
+npm run build         # Production build (next build)
+npm start             # Production server (next start)
+npm run mcp:stdio     # MCP server on stdio (for Claude Code)
+npm run db:up         # Start local Postgres (docker compose)
+npm run db:generate   # Generate a new Drizzle migration from schema changes
+npm run db:migrate    # Apply pending migrations against $DATABASE_URL
+npm run db:push       # Sync schema directly (skips migration files)
+npm run db:studio     # Open Drizzle Studio
+npm run db:test:setup # Create + migrate a separate test DB (turnos_test)
 ```
+
+After running `db:test:setup` once, add the printed `DATABASE_URL_TEST` line to your `.env` so `npm test` uses the isolated DB instead of truncating the dev seed.
 
 ## Architecture
 
@@ -27,13 +35,17 @@ Next.js 15 App Router serves both the SSR UI and the MCP HTTP endpoint as a sing
 
 ### Shared database layer
 
-`server/db.ts` is imported by both route pages and MCP tools. Key patterns:
+Drizzle ORM on PostgreSQL via `pg.Pool`. Three files make up the data layer:
 
-- **`getDb(dbPath?)`** returns a singleton stored on `globalThis.__turnos_db` (survives HMR)
-- Accepts `:memory:` for tests, defaults to `process.cwd()/turnos.db`
-- `server/db.server.ts` re-exports everything (kept for the `.server.ts` convention even though Next App Router doesn't require it — Server Components already exclude server-only modules from client bundles)
-- `better-sqlite3` is listed in `serverExternalPackages` in `next.config.ts` so Next doesn't try to bundle the native addon
-- Four tables: `hospitals`, `doctors`, `patients`, `appointments`. WAL mode, foreign keys enforced. DB file (`turnos.db`) is created in the project root on first run
+- `server/schema.ts` — Drizzle table definitions (`hospitals`, `patients`, `doctors`, `doctor_schedules`, `appointments`, `waitlist_entries`). UUID PKs are generated client-side via `randomUUID()`.
+- `server/client.ts` — exports `db`, a lazy `NodePgDatabase` singleton stored on `globalThis.__db` (survives HMR). Reads `DATABASE_URL` from env.
+- `server/db.ts` — high-level helpers (`insertHospital`, `listDoctors`, `createAppointment`, …) used by MCP tools and the public `/hospitales`, `/doctores`, `/pacientes`, `/turnos` pages.
+
+Admin pages and server actions in `app/(admin)/admin/` query Drizzle directly via `db` + `schema`. `pg` stays in `serverExternalPackages` in `next.config.ts` so Next doesn't try to bundle the native driver.
+
+### Migrations
+
+Generated SQL lives in `drizzle/`. After editing `server/schema.ts`, run `npm run db:generate` to emit a new file, then `npm run db:migrate` to apply it. `drizzle.config.ts` is the source of truth for the kit. The `__drizzle_migrations` table (in the `drizzle` schema) tracks applied migrations.
 
 ### MCP
 
@@ -47,31 +59,22 @@ Server Components fetch directly:
 ```typescript
 export default async function Page({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
-  const db = getDb();
-  const rows = listHospitals(db, { name: q });
+  const rows = await listHospitals({ name: q });
   return <…/>;
 }
 ```
 
-Interactive filters live in client components (e.g. `app/components/search-input.tsx`, `app/turnos/filters.tsx`) that call `router.replace()` with new search params. The `~` alias resolves to `./app` via tsconfig `paths`.
+Interactive filters live in client components (e.g. `app/components/search-input.tsx`) that call `router.replace()` with new search params. The `~` alias resolves to `./app` via tsconfig `paths`.
 
 ## Testing
 
-Vitest with node environment. Tests use in-memory SQLite — no DB file needed.
-
-```typescript
-let db: Database.Database;
-beforeEach(() => { db = initDb(":memory:"); });
-afterEach(() => { db.close(); (globalThis as any).__turnos_db = undefined; });
-```
-
-Always reset `globalThis.__turnos_db` in `afterEach` to avoid singleton leakage between tests.
+Vitest with node environment. Tests hit the same local Postgres (the dev DB), resetting state via `TRUNCATE ... RESTART IDENTITY CASCADE` in `tests/helpers/db.ts`. Set `DATABASE_URL` in `.env` and run `npm run db:up` before testing.
 
 Test files: `tests/server/db.test.ts` (DB queries), `tests/server/mcp.test.ts` (MCP server), `tests/routes/loaders.test.ts` (DB-backed page data), `tests/integration/server.test.ts` (MCP route handler invoked directly via `Request`).
 
 ## Next.js gotchas
 
-- `better-sqlite3` must stay in `serverExternalPackages` in `next.config.ts` — it's a native C++ addon
+- `pg` must stay in `serverExternalPackages` in `next.config.ts` — Next shouldn't try to bundle the native driver
 - DB paths use `process.cwd()`, not `import.meta.url`
 - Imports of `.ts` source files from other `.ts` files use bare paths (no `.js` extension) so the Next bundler resolves them. The standalone scripts (`mcp-stdio.ts`, `seed.ts`) run via `tsx`, which also accepts bare paths.
 - The `~` alias resolves to `./app` via tsconfig `paths`

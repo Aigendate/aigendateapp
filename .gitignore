@@ -12,4 +12,4 @@ tsconfig.tsbuildinfo
 skills-lock.json
 .react-router/
 
-/app/generated/prisma
+.vercel

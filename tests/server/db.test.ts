@@ -1,12 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import Database from "better-sqlite3";
+import { describe, it, expect, beforeEach } from "vitest";
 import { randomUUID } from "node:crypto";
-
-// We'll import from the new server/db.ts module once it exists.
-// For now, define the expected API shape and test against it.
 import {
-  initDb,
-  getDb,
   listHospitals,
   insertHospital,
   insertDoctor,
@@ -17,31 +11,32 @@ import {
   listAppointments,
   cancelAppointment,
 } from "../../server/db";
+import { resetDb } from "../helpers/db";
 
-function seedTestDb(db: Database.Database) {
-  const hospitalId = insertHospital(db, {
+async function seedTestDb() {
+  const hospitalId = await insertHospital({
     name: "Hospital Central",
     address: "Asunción, Paraguay",
     lat: -25.28,
     lng: -57.63,
   });
-  const hospital2Id = insertHospital(db, {
+  const hospital2Id = await insertHospital({
     name: "Hospital Regional",
     address: "Ciudad del Este, Paraguay",
     lat: -25.51,
     lng: -54.61,
   });
-  const doctorId = insertDoctor(db, {
+  const doctorId = await insertDoctor({
     name: "Dr. María López",
     specialty: "Cardiología",
     hospital_id: hospitalId,
   });
-  const doctor2Id = insertDoctor(db, {
+  const doctor2Id = await insertDoctor({
     name: "Dr. Carlos Ruiz",
     specialty: "Traumatología",
     hospital_id: hospital2Id,
   });
-  const patient = registerPatient(db, {
+  const patient = await registerPatient({
     name: "Juan Pérez",
     email: "juan@test.com",
     phone: "+595 21 555-0001",
@@ -51,95 +46,45 @@ function seedTestDb(db: Database.Database) {
   return { hospitalId, hospital2Id, doctorId, doctor2Id, patientId: patient.patient.id };
 }
 
-describe("initDb", () => {
-  it("creates all 4 tables", () => {
-    const db = initDb(":memory:");
-    const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .all() as { name: string }[];
-    const names = tables.map((t) => t.name);
-    expect(names).toContain("hospitals");
-    expect(names).toContain("patients");
-    expect(names).toContain("doctors");
-    expect(names).toContain("appointments");
-    db.close();
-  });
-});
-
-describe("getDb", () => {
-  afterEach(() => {
-    // Reset singleton between tests
-    (globalThis as any).__turnos_db = undefined;
-  });
-
-  it("returns a Database instance", () => {
-    const db = getDb(":memory:");
-    expect(db).toBeInstanceOf(Database);
-    db.close();
-  });
-
-  it("returns the same instance on repeated calls", () => {
-    const db1 = getDb(":memory:");
-    const db2 = getDb(":memory:");
-    expect(db1).toBe(db2);
-    db1.close();
-  });
-});
-
 describe("hospitals", () => {
-  let db: Database.Database;
+  beforeEach(resetDb);
 
-  beforeEach(() => {
-    db = initDb(":memory:");
-  });
-
-  afterEach(() => {
-    db.close();
-    (globalThis as any).__turnos_db = undefined;
-  });
-
-  it("inserts and lists hospitals", () => {
-    insertHospital(db, { name: "Test Hospital", address: "Test St", lat: -25.0, lng: -57.0 });
-    const hospitals = listHospitals(db);
+  it("inserts and lists hospitals", async () => {
+    await insertHospital({ name: "Test Hospital", address: "Test St", lat: -25.0, lng: -57.0 });
+    const hospitals = await listHospitals();
     expect(hospitals).toHaveLength(1);
     expect(hospitals[0]).toMatchObject({ name: "Test Hospital", address: "Test St" });
     expect(hospitals[0].id).toBeTruthy();
   });
 
-  it("filters by name", () => {
-    insertHospital(db, { name: "Hospital Central", address: "A", lat: -25.0, lng: -57.0 });
-    insertHospital(db, { name: "Clinica Norte", address: "B", lat: -25.0, lng: -57.0 });
-    const results = listHospitals(db, { name: "Central" });
+  it("filters by name", async () => {
+    await insertHospital({ name: "Hospital Central", address: "A", lat: -25.0, lng: -57.0 });
+    await insertHospital({ name: "Clinica Norte", address: "B", lat: -25.0, lng: -57.0 });
+    const results = await listHospitals({ name: "Central" });
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe("Hospital Central");
   });
 
-  it("sorts by distance when lat/lng provided", () => {
-    insertHospital(db, { name: "Far", address: "A", lat: -30.0, lng: -57.0 });
-    insertHospital(db, { name: "Near", address: "B", lat: -25.28, lng: -57.63 });
-    const results = listHospitals(db, { lat: -25.28, lng: -57.63 });
+  it("sorts by distance when lat/lng provided", async () => {
+    await insertHospital({ name: "Far", address: "A", lat: -30.0, lng: -57.0 });
+    await insertHospital({ name: "Near", address: "B", lat: -25.28, lng: -57.63 });
+    const results = await listHospitals({ lat: -25.28, lng: -57.63 });
     expect(results[0].name).toBe("Near");
     expect(results[0].distance_km).toBeDefined();
   });
 });
 
 describe("doctors", () => {
-  let db: Database.Database;
   let hospitalId: string;
 
-  beforeEach(() => {
-    db = initDb(":memory:");
-    hospitalId = insertHospital(db, { name: "Hospital Central", address: "A", lat: -25.0, lng: -57.0 });
+  beforeEach(async () => {
+    await resetDb();
+    hospitalId = await insertHospital({ name: "Hospital Central", address: "A", lat: -25.0, lng: -57.0 });
   });
 
-  afterEach(() => {
-    db.close();
-    (globalThis as any).__turnos_db = undefined;
-  });
-
-  it("inserts and lists doctors with hospital name", () => {
-    insertDoctor(db, { name: "Dr. Test", specialty: "Cardiología", hospital_id: hospitalId });
-    const doctors = listDoctors(db);
+  it("inserts and lists doctors with hospital name", async () => {
+    await insertDoctor({ name: "Dr. Test", specialty: "Cardiología", hospital_id: hospitalId });
+    const doctors = await listDoctors();
     expect(doctors).toHaveLength(1);
     expect(doctors[0]).toMatchObject({
       name: "Dr. Test",
@@ -148,38 +93,29 @@ describe("doctors", () => {
     });
   });
 
-  it("filters by specialty", () => {
-    insertDoctor(db, { name: "Dr. A", specialty: "Cardiología", hospital_id: hospitalId });
-    insertDoctor(db, { name: "Dr. B", specialty: "Pediatría", hospital_id: hospitalId });
-    const results = listDoctors(db, { specialty: "Cardio" });
+  it("filters by specialty", async () => {
+    await insertDoctor({ name: "Dr. A", specialty: "Cardiología", hospital_id: hospitalId });
+    await insertDoctor({ name: "Dr. B", specialty: "Pediatría", hospital_id: hospitalId });
+    const results = await listDoctors({ specialty: "Cardio" });
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe("Dr. A");
   });
 
-  it("filters by hospital_id", () => {
-    const h2 = insertHospital(db, { name: "Other", address: "B", lat: -25.0, lng: -57.0 });
-    insertDoctor(db, { name: "Dr. A", specialty: "Cardiología", hospital_id: hospitalId });
-    insertDoctor(db, { name: "Dr. B", specialty: "Cardiología", hospital_id: h2 });
-    const results = listDoctors(db, { hospital_id: hospitalId });
+  it("filters by hospital_id", async () => {
+    const h2 = await insertHospital({ name: "Other", address: "B", lat: -25.0, lng: -57.0 });
+    await insertDoctor({ name: "Dr. A", specialty: "Cardiología", hospital_id: hospitalId });
+    await insertDoctor({ name: "Dr. B", specialty: "Cardiología", hospital_id: h2 });
+    const results = await listDoctors({ hospital_id: hospitalId });
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe("Dr. A");
   });
 });
 
 describe("patients", () => {
-  let db: Database.Database;
+  beforeEach(resetDb);
 
-  beforeEach(() => {
-    db = initDb(":memory:");
-  });
-
-  afterEach(() => {
-    db.close();
-    (globalThis as any).__turnos_db = undefined;
-  });
-
-  it("registers a patient with only name", () => {
-    const result = registerPatient(db, { name: "Test Patient" });
+  it("registers a patient with only name", async () => {
+    const result = await registerPatient({ name: "Test Patient" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.patient.name).toBe("Test Patient");
@@ -187,37 +123,31 @@ describe("patients", () => {
     }
   });
 
-  it("rejects duplicate email", () => {
-    registerPatient(db, { name: "A", email: "dup@test.com" });
-    const result = registerPatient(db, { name: "B", email: "dup@test.com" });
+  it("rejects duplicate email", async () => {
+    await registerPatient({ name: "A", email: "dup@test.com" });
+    const result = await registerPatient({ name: "B", email: "dup@test.com" });
     expect(result.ok).toBe(false);
   });
 
-  it("lists and searches patients", () => {
-    registerPatient(db, { name: "Juan Pérez", email: "juan@test.com" });
-    registerPatient(db, { name: "Ana García", email: "ana@test.com" });
-    expect(listPatients(db)).toHaveLength(2);
-    expect(listPatients(db, "Juan")).toHaveLength(1);
-    expect(listPatients(db, "ana@test")).toHaveLength(1);
+  it("lists and searches patients", async () => {
+    await registerPatient({ name: "Juan Pérez", email: "juan@test.com" });
+    await registerPatient({ name: "Ana García", email: "ana@test.com" });
+    expect(await listPatients()).toHaveLength(2);
+    expect(await listPatients("Juan")).toHaveLength(1);
+    expect(await listPatients("ana@test")).toHaveLength(1);
   });
 });
 
 describe("appointments", () => {
-  let db: Database.Database;
-  let seed: ReturnType<typeof seedTestDb>;
+  let seed: Awaited<ReturnType<typeof seedTestDb>>;
 
-  beforeEach(() => {
-    db = initDb(":memory:");
-    seed = seedTestDb(db);
+  beforeEach(async () => {
+    await resetDb();
+    seed = await seedTestDb();
   });
 
-  afterEach(() => {
-    db.close();
-    (globalThis as any).__turnos_db = undefined;
-  });
-
-  it("creates an appointment", () => {
-    const result = createAppointment(db, {
+  it("creates an appointment", async () => {
+    const result = await createAppointment({
       hospital_id: seed.hospitalId,
       patient_id: seed.patientId,
       doctor_id: seed.doctorId,
@@ -230,15 +160,15 @@ describe("appointments", () => {
     }
   });
 
-  it("rejects double-booking same doctor/date/time", () => {
-    createAppointment(db, {
+  it("rejects double-booking same doctor/date/time", async () => {
+    await createAppointment({
       hospital_id: seed.hospitalId,
       patient_id: seed.patientId,
       doctor_id: seed.doctorId,
       date: "2026-05-10",
       time: "09:00",
     });
-    const result = createAppointment(db, {
+    const result = await createAppointment({
       hospital_id: seed.hospitalId,
       patient_id: seed.patientId,
       doctor_id: seed.doctorId,
@@ -248,8 +178,8 @@ describe("appointments", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("rejects unknown doctor", () => {
-    const result = createAppointment(db, {
+  it("rejects unknown doctor", async () => {
+    const result = await createAppointment({
       hospital_id: seed.hospitalId,
       patient_id: seed.patientId,
       doctor_id: randomUUID(),
@@ -259,11 +189,11 @@ describe("appointments", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("rejects doctor at wrong hospital", () => {
-    const result = createAppointment(db, {
+  it("rejects doctor at wrong hospital", async () => {
+    const result = await createAppointment({
       hospital_id: seed.hospital2Id,
       patient_id: seed.patientId,
-      doctor_id: seed.doctorId, // belongs to hospitalId, not hospital2Id
+      doctor_id: seed.doctorId,
       date: "2026-05-10",
       time: "09:00",
     });
@@ -273,26 +203,26 @@ describe("appointments", () => {
     }
   });
 
-  it("lists appointments with filters", () => {
-    createAppointment(db, {
+  it("lists appointments with filters", async () => {
+    await createAppointment({
       hospital_id: seed.hospitalId,
       patient_id: seed.patientId,
       doctor_id: seed.doctorId,
       date: "2026-05-10",
       time: "09:00",
     });
-    const all = listAppointments(db, {});
+    const all = await listAppointments({});
     expect(all).toHaveLength(1);
     expect(all[0].doctor_name).toBe("Dr. María López");
     expect(all[0].patient_name).toBe("Juan Pérez");
     expect(all[0].hospital_name).toBe("Hospital Central");
 
-    const byDate = listAppointments(db, { date: "2026-05-11" });
+    const byDate = await listAppointments({ date: "2026-05-11" });
     expect(byDate).toHaveLength(0);
   });
 
-  it("cancels an appointment", () => {
-    const created = createAppointment(db, {
+  it("cancels an appointment", async () => {
+    const created = await createAppointment({
       hospital_id: seed.hospitalId,
       patient_id: seed.patientId,
       doctor_id: seed.doctorId,
@@ -301,14 +231,13 @@ describe("appointments", () => {
     });
     if (!created.ok) throw new Error("Setup failed");
 
-    const result = cancelAppointment(db, created.appointment.id);
+    const result = await cancelAppointment(created.appointment.id);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.appointment.status).toBe("cancelled");
     }
 
-    // double-cancel should fail
-    const again = cancelAppointment(db, created.appointment.id);
+    const again = await cancelAppointment(created.appointment.id);
     expect(again.ok).toBe(false);
   });
 });

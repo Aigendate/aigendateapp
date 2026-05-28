@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
-  getDb,
   listHospitals,
   listDoctors,
   registerPatient,
@@ -11,9 +10,8 @@ import {
   cancelAppointment,
 } from "./db";
 
-export function createMcpServer(dbPath?: string): McpServer {
+export function createMcpServer(): McpServer {
   const server = new McpServer({ name: "turnos", version: "1.0.0" });
-  const db = getDb(dbPath);
 
   server.tool(
     "list_hospitals",
@@ -24,7 +22,7 @@ export function createMcpServer(dbPath?: string): McpServer {
       lng: z.number().optional().describe("Your longitude (for distance sorting)"),
     },
     async ({ name, lat, lng }) => {
-      const hospitals = listHospitals(db, { name, lat, lng });
+      const hospitals = await listHospitals({ name, lat, lng });
       if (hospitals.length === 0) {
         return { content: [{ type: "text", text: "No hospitals found." }] };
       }
@@ -46,7 +44,7 @@ export function createMcpServer(dbPath?: string): McpServer {
       phone: z.string().optional().describe("Patient phone number"),
     },
     async (params) => {
-      const result = registerPatient(db, params);
+      const result = await registerPatient(params);
       if (!result.ok) {
         return { content: [{ type: "text", text: `Error: ${result.error}` }] };
       }
@@ -67,7 +65,7 @@ export function createMcpServer(dbPath?: string): McpServer {
       search: z.string().optional().describe("Search by name or email"),
     },
     async ({ search }) => {
-      const patients = listPatients(db, search);
+      const patients = await listPatients(search);
       if (patients.length === 0) {
         return { content: [{ type: "text", text: "No patients found." }] };
       }
@@ -87,7 +85,7 @@ export function createMcpServer(dbPath?: string): McpServer {
       name: z.string().optional().describe("Search by doctor name"),
     },
     async (filters) => {
-      const doctors = listDoctors(db, filters);
+      const doctors = await listDoctors(filters);
       if (doctors.length === 0) {
         return { content: [{ type: "text", text: "No doctors found." }] };
       }
@@ -109,7 +107,7 @@ export function createMcpServer(dbPath?: string): McpServer {
       time: z.string().regex(/^\d{2}:\d{2}$/).describe("Appointment time (HH:MM, 24-hour)"),
     },
     async (params) => {
-      const result = createAppointment(db, params);
+      const result = await createAppointment(params);
       if (!result.ok) {
         return { content: [{ type: "text", text: `Error: ${result.error}` }] };
       }
@@ -134,7 +132,7 @@ export function createMcpServer(dbPath?: string): McpServer {
       status: z.enum(["scheduled", "cancelled"]).optional().describe("Filter by status (default: scheduled)"),
     },
     async (filters) => {
-      const rows = listAppointments(db, filters);
+      const rows = await listAppointments(filters);
       if (rows.length === 0) {
         return { content: [{ type: "text", text: "No appointments found." }] };
       }
@@ -153,7 +151,7 @@ export function createMcpServer(dbPath?: string): McpServer {
       id: z.string().describe("The appointment ID to cancel"),
     },
     async ({ id }) => {
-      const result = cancelAppointment(db, id);
+      const result = await cancelAppointment(id);
       if (!result.ok) {
         return { content: [{ type: "text", text: `Error: ${result.error}` }] };
       }

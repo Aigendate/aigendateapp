@@ -1,4 +1,6 @@
-import { prisma } from "../../../../server/prisma";
+import { asc, desc, eq } from "drizzle-orm";
+import { db } from "../../../../server/client";
+import { doctors, patients, waitlist_entries } from "../../../../server/schema";
 import { Badge } from "~/components/ui/badge";
 import {
   Table,
@@ -11,20 +13,35 @@ import {
 import { WaitlistCreateForm, WaitlistActions } from "./client";
 
 export default async function ListaEsperaPage() {
-  const [entries, patients, doctors] = await Promise.all([
-    prisma.waitlistEntry.findMany({
-      where: { status: "waiting" },
-      include: {
-        patient: { select: { name: true, phone: true } },
-        doctor: { select: { name: true } },
-      },
-      orderBy: [{ priority: "desc" }, { created_at: "asc" }],
-    }),
-    prisma.patient.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.doctor.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, specialty: true } }),
+  const [entries, patientRows, doctorRows] = await Promise.all([
+    db
+      .select({
+        id: waitlist_entries.id,
+        specialty: waitlist_entries.specialty,
+        date_from: waitlist_entries.date_from,
+        date_to: waitlist_entries.date_to,
+        time_pref: waitlist_entries.time_pref,
+        priority: waitlist_entries.priority,
+        patient_name: patients.name,
+        patient_phone: patients.phone,
+        doctor_name: doctors.name,
+      })
+      .from(waitlist_entries)
+      .innerJoin(patients, eq(waitlist_entries.patient_id, patients.id))
+      .leftJoin(doctors, eq(waitlist_entries.doctor_id, doctors.id))
+      .where(eq(waitlist_entries.status, "waiting"))
+      .orderBy(desc(waitlist_entries.priority), asc(waitlist_entries.created_at)),
+    db
+      .select({ id: patients.id, name: patients.name })
+      .from(patients)
+      .orderBy(asc(patients.name)),
+    db
+      .select({ id: doctors.id, name: doctors.name, specialty: doctors.specialty })
+      .from(doctors)
+      .orderBy(asc(doctors.name)),
   ]);
 
-  const specialties = [...new Set(doctors.map((d) => d.specialty))].sort();
+  const specialties = [...new Set(doctorRows.map((d) => d.specialty))].sort();
 
   return (
     <>
@@ -33,7 +50,7 @@ export default async function ListaEsperaPage() {
           <h1 className="font-display text-2xl font-extrabold tracking-tight">Lista de Espera</h1>
           <Badge>{entries.length} esperando</Badge>
         </div>
-        <WaitlistCreateForm patients={patients} doctors={doctors} specialties={specialties} />
+        <WaitlistCreateForm patients={patientRows} doctors={doctorRows} specialties={specialties} />
       </div>
 
       <Table>
@@ -52,20 +69,7 @@ export default async function ListaEsperaPage() {
         </TableHeader>
         <TableBody>
           {entries.map((e) => (
-            <WaitlistActions
-              key={e.id}
-              entry={{
-                id: e.id,
-                patient_name: e.patient.name,
-                patient_phone: e.patient.phone,
-                specialty: e.specialty,
-                doctor_name: e.doctor?.name ?? null,
-                date_from: e.date_from,
-                date_to: e.date_to,
-                time_pref: e.time_pref,
-                priority: e.priority,
-              }}
-            />
+            <WaitlistActions key={e.id} entry={e} />
           ))}
           {entries.length === 0 && (
             <TableRow>

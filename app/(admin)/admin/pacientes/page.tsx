@@ -1,4 +1,6 @@
-import { prisma } from "../../../../server/prisma";
+import { asc, ilike, or } from "drizzle-orm";
+import { db } from "../../../../server/client";
+import { patients } from "../../../../server/schema";
 import { Badge } from "~/components/ui/badge";
 import { SearchInput } from "~/components/search-input";
 import {
@@ -17,19 +19,18 @@ export default async function AdminPacientesPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q } = await searchParams;
-  const patients = await prisma.patient.findMany({
-    where: q
-      ? { OR: [{ name: { contains: q } }, { email: { contains: q } }] }
-      : undefined,
-    orderBy: { name: "asc" },
-  });
+  const rows = await db
+    .select()
+    .from(patients)
+    .where(q ? or(ilike(patients.name, `%${q}%`), ilike(patients.email, `%${q}%`)) : undefined)
+    .orderBy(asc(patients.name));
 
   return (
     <>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-2xl font-extrabold tracking-tight">Pacientes</h1>
-          <Badge>{patients.length}</Badge>
+          <Badge>{rows.length}</Badge>
         </div>
         <PacienteCreateForm />
       </div>
@@ -51,10 +52,10 @@ export default async function AdminPacientesPage({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {patients.map((p) => (
+          {rows.map((p) => (
             <PacienteActions key={p.id} patient={p} />
           ))}
-          {patients.length === 0 && (
+          {rows.length === 0 && (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-muted-foreground">
                 No se encontraron pacientes.

@@ -1,16 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { getDb } from "../../server/db";
-
-// Initialize the shared DB singleton with an in-memory DB before importing
-// the route handler — the handler's createMcpServer() will reuse this instance.
-getDb(":memory:");
+import { describe, it, expect, beforeAll } from "vitest";
+import { resetDb } from "../helpers/db";
 
 const route = await import("../../app/mcp/route");
 
 describe("MCP route handler", () => {
-  afterAll(() => {
-    (globalThis as any).__turnos_db = undefined;
-    (globalThis as any).__mcp_sessions = undefined;
+  beforeAll(async () => {
+    await resetDb();
+    (globalThis as { __mcp_sessions?: unknown }).__mcp_sessions = undefined;
   });
 
   it("OPTIONS returns 204 with CORS headers", async () => {
